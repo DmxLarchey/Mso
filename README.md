@@ -1,4 +1,4 @@
-# The well-foundedness of the multiset ordering
+# The well-foundedness of the multiset ordering in Coq/Rocq
 
 This is a [standalone Coq constructive proof](mso.v) of the [Dershowitz-Manna ordering](https://en.wikipedia.org/wiki/Dershowitz%E2%80%93Manna_ordering) theorem,
 i.e. the well-foundedness of the multiset ordering. The proof follows the
