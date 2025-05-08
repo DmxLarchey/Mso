@@ -29,7 +29,7 @@ Corollary mso_wf : well_founded < → well_founded ⊏⁺.
 
 Other result are proved for `mso`/`⊏⁺`, such as:
 ```coq
-∀ x l, l <ₗ x → l ⊏⁺ [x].
+∀ x l, (∀x, x ∈ l → x < y) → l ⊏⁺ [x].
 ∀ l m, l ⊏ m → l ⊏⁺ m.
 ∀ x y, x < y → [x] ⊏⁺ [y].
 ∀ l r u v, u ⊏⁺ v → l++u++r ⊏⁺ l++v++r.
