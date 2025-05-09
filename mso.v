@@ -15,9 +15,9 @@ Set Implicit Arguments.
 (* The proof displayed here is largely inspired from 
    the short outline of Tobias Nipkow:
 
-  http://www4.in.tum.de/~nipkow/misc/multiset.ps
+    https://www21.in.tum.de/~nipkow/Misc/multiset.ps
 
-*)
+   see papers/multiset.ps for a local copy *)
 
 #[local] Notation "x ∈ l" := (In x l) (at level 70, no associativity, format "x  ∈  l").
 #[local] Notation "l '~ₚ' m" := (@Permutation _ l m) (at level 70, no associativity, format "l  ~ₚ  m").
