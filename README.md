@@ -2,7 +2,7 @@
 
 This is a [standalone Coq constructive proof](mso.v) of the [Dershowitz-Manna ordering](https://en.wikipedia.org/wiki/Dershowitz%E2%80%93Manna_ordering) theorem,
 i.e. the well-foundedness of the multiset ordering. The proof follows the
-[outline of Tobias Nipkow](papers/multiset.ps).
+[outline of Tobias Nipkow](papers/multiset.pdf).
 
 Multisets are viewed as list identified under permutations (ie a setoid). Stated in Coq, the main results looks like:
 ```coq
