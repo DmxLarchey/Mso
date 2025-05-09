@@ -44,6 +44,7 @@ Section utilities.
   Fact cons_inj x y l m : x::l = y::m → x = y ∧ l = m.
   Proof. now inversion 1. Qed.
 
+  (* _++[_]++_ is a better shape than _++_::_ for rewrites below *)
   Fact in_split x m : x ∈ m → ∃ l r, m = l++[x]++r.
   Proof. apply in_split. Qed.
 
@@ -54,13 +55,14 @@ Section utilities.
     assert (x ∈ m) as (l' & r' & ->)%in_split; simpl; eauto.
     apply Permutation_in with (1 := H); auto.
   Qed.
+  
+  Fact clos_trans__clos_refl_trans R x y : clos_trans R x y → clos_refl_trans R x y.
+  Proof. induction 1; eauto. Qed. 
+  
+  Hint Resolve clos_trans__clos_refl_trans : core.
 
-  Fact clos_trans_inv_right R x z :
-    clos_trans R x z -> ∃y, clos_refl_trans R x y ∧ R y z.
-  Proof.
-    induction 1 as [ | ? ? ? _ (? & []) _ (? & []) ]; eauto.
-    eexists; eauto.
-  Qed.
+  Fact clos_trans_inv_right R x z : clos_trans R x z → ∃y, clos_refl_trans R x y ∧ R y z.
+  Proof. induction 1 as [ | ? ? ? ? _ _ (? & []) ]; eauto. Qed.
 
 End utilities.
 
@@ -71,8 +73,8 @@ Section multiset_order.
   (* Infix notation for the base relation *)
   Infix "<" := R.
 
-  (* y is a <-upper bound for the list l *)
-  Notation "l <ₗ y" := (∀x, x ∈ l → x < y).
+  (* x is a <-upper bound for the list m *)
+  Notation "m <ₗ x" := (∀y, y ∈ m → y < x).
 
   (* Inductive definition of the list/multiset relation ⊏
      of which the transitive closure ⊏⁺ is the mso. The
@@ -95,7 +97,7 @@ Section multiset_order.
   Proof.
     split.
     + induction 1 as [ | ? ? ? ? ? (? & ? & ? & ? & ? & -> & ?) ]; do 4 eexists; eauto.
-    + intros (? & ? & ? & ? & ?%Permutation_sym & -> & ?); eauto.
+    + intros (? & ? & ? & ? & ? & -> & ?); eauto.
   Qed.
 
   Fact mso_step_sg x y : x < y → [x] ⊏ [y].
@@ -120,13 +122,15 @@ Section multiset_order.
     intros (? & ? & -> & ?)%Permutation_middle_inv; eauto.
   Qed.
 
+  Fact mso_step_cons x l : l ⊏ x::l.
+  Proof. now apply @mso_step_intro with (l := []) (m := []); simpl. Qed.
+
+  (** Inversion lemmas for Acc_mso_step_below *)
+
   (** Case analysis for the shape _ ⊏ [] 
       The empty list is minimal for ⊏     *)
   Fact mso_step_nil_right_inv l : ¬ l ⊏ [].
-  Proof. now intros ([|] & ? & ? & ? & ? & ? & ?)%mso_step_inv. Qed.
-
-  Fact mso_step_cons x l : l ⊏ x::l.
-  Proof. now apply @mso_step_intro with (l := []) (m := []); simpl. Qed.
+  Proof. now intros ([] & ? & ? & ? & ? & ? & ?)%mso_step_inv. Qed.
 
   (** Case analysis (inversion) for the shape _ ⊏ _::_  
       This is the critical lemma for inverting after
@@ -134,8 +138,11 @@ Section multiset_order.
        Acc_mso_step below *)
   Lemma mso_step_cons_right_inv k y m : 
       k ⊏ y::m 
-    → (∃ u, k ~ₚ u ++ m ∧ u <ₗ y)
-    ∨ (∃ l u x r, m = l++[x]++r ∧ k ~ₚ y::l++u++r ∧ u <ₗ x).
+    → (∃ u,       k ~ₚ u ++ m 
+                ∧ u <ₗ y)
+    ∨ (∃ l u x r, m = l++[x]++r
+                ∧ k ~ₚ y::l++u++r
+                ∧ u <ₗ x).
   Proof.
     intros ([] & ? & ? & ? & ? & [-> ->]%cons_inj & ?)%mso_step_inv; simpl in *. 
     + left; eauto.
@@ -144,7 +151,8 @@ Section multiset_order.
 
   Section Acc_mso_step.
 
-    Hint Resolve mso_step_perm_r Acc_intro : core.
+    Hint Constructors Acc : core.
+    Hint Resolve mso_step_perm_r : core.
 
     Notation W := (Acc mso_step).
 
@@ -152,7 +160,7 @@ Section multiset_order.
     Proof. intros ? []; eauto. Qed.
 
     Local Fact Acc_mso_step_nil : W [].
-    Proof. constructor; now intros ? ?%mso_step_nil_right_inv. Qed.
+    Proof. constructor; intros _ []%mso_step_nil_right_inv. Qed.
 
     (* This is the only complicated proof *)
 
@@ -161,7 +169,7 @@ Section multiset_order.
       → W r  
       → ∀l, l <ₗ y → W (l++r).
     Proof. 
-      intros Hy ?; induction l; simpl; eauto.
+      intros Hy ? l; induction l; simpl; eauto.
       intros; apply Hy; eauto.
     Qed.
 
@@ -243,10 +251,7 @@ Section multiset_order.
 
   (* Closure under right head/tail append *)
   Fact mso_app_head l m r : m ⊏⁺ r → m ⊏⁺ l++r.
-  Proof.
-    induction l as [ | x l IH ]; simpl; auto.
-    intros H%IH; eauto.
-  Qed.
+  Proof. induction l as [ | x l IH ]; simpl; auto; intros ?%IH; eauto. Qed.
 
   Fact mso_app_tail l m r : m ⊏⁺ l → m ⊏⁺ l++r.
   Proof.
@@ -258,9 +263,7 @@ Section multiset_order.
 
   (* [] is also minimal for ⊏⁺ *)
   Fact mso_nil_inv l : ¬ l ⊏⁺ [].
-  Proof.
-    now intros (? & _ & ?%mso_step_nil_right_inv)%clos_trans_inv_right.
-  Qed.
+  Proof. intros (? & _ & []%mso_step_nil_right_inv)%clos_trans_inv_right. Qed.
 
   Hint Resolve mso_step_cons : core.
 
@@ -269,25 +272,24 @@ Section multiset_order.
 
   Hint Resolve mso_sg mso_app_head mso_app_tail : core.
 
-  Lemma Acc_mso_Forall l : Acc mso l → Forall (Acc R) l.
-  Proof.
-    rewrite Forall_forall.
-    induction 1 as [ l _ IHl ]; intros x Hx.
-    constructor; intros y Hy.
-    apply IHl with (y := [y]); auto.
-    apply in_split in Hx as (? & ? & ->); auto.
-  Qed.
+  Lemma Acc_mso_forall l : Acc mso l → ∀x, x ∈ l → Acc R x.
+  Proof. induction 1; intros ? (? & ? & ->)%in_split; constructor; eauto. Qed.
+  
+  Hint Resolve Forall_Acc_mso_step Acc_clos_trans : core.
+  
+  Lemma forall_Acc_mso l : (∀x, x ∈ l → Acc R x) → Acc mso l.
+  Proof. unfold mso; rewrite <- Forall_forall; auto. Qed.
 
-  Hint Resolve Acc_mso_Forall Forall_Acc_mso_step Acc_clos_trans : core.
+  Hint Resolve Acc_mso_forall forall_Acc_mso : core.
 
   (* This is the main theorem characterizing mso accessibility *)
-  Theorem Acc_mso_iff l : Acc mso l ↔ Forall (Acc R) l.
-  Proof. unfold mso; split; eauto. Qed.
+  Theorem Acc_mso_iff l : Acc mso l ↔ ∀x, x ∈ l → Acc R x.
+  Proof. split; eauto. Qed.
 
   Hypothesis Rwf : well_founded R.
 
   Corollary mso_wf : well_founded mso.
-  Proof. intro; apply Acc_mso_iff, Forall_forall; auto. Qed.
+  Proof. intro; apply Acc_mso_iff; auto. Qed.
  
 End multiset_order.
 
