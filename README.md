@@ -11,7 +11,7 @@ Notation "l ~ₚ m" := (Permutation l m).
 Variables (X : Type) (< : X → X → Prop).
 
 Inductive mso_step : list X → list X → Prop :=
-    | mso_step_intro l m x r : (∀y, y ∈ l → y < x)
+    | mso_step_intro l m x r : (∀y, y ∈ m → y < x)
                              → l++m++r ⊏ l++[x]++r
     | mso_step_perm_l l m k  : l ~ₚ m 
                              → l ⊏ k 
