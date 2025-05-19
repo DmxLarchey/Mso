@@ -45,10 +45,11 @@ Others result are proved for `mso`/`⊏⁺`, such as:
 # The multiset path ordering in Coq/Rocq
 
 We use the theorem `Acc_mso_iff` to establish the well-foundedness of the multiset path ordering `mpo`, a nested form of `mso` above.
-The proof we implement is somewhat inspired, but arguably also simplified, from the proof given by Jean Goubault-Larecq in 
+The proof we implement is somewhat inspired, but arguably also simplified, from the proof given by Jean Goubault-Larrecq in 
 [_A Constructive Proof of the Topological Kruskal Theorem_](http://www.lsv.ens-cachan.fr/Publis/PAPERS/PDF/JGL-mfcs13.pdf).
 
-The `mpo` is inductively defined on rose trees as:
+In the supplementary file [`mpo.v`](mpo.v) (which imports `mso.vo`, so compile this one first), 
+the `mpo` is inductively defined on rose trees as:
 ```coq
 Variables (X : Type) (R : X → X → Prop).
 
