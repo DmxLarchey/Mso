@@ -6,6 +6,7 @@ i.e. the well-foundedness of the multiset ordering. The proof follows the
 
 Multisets are viewed as list identified under permutations (ie a setoid). Stated in Coq, the main results looks like:
 ```coq
+Notation "x ∈ l" := (In x l).
 Notation "l ~ₚ m" := (Permutation l m).
 
 Variables (X : Type) (< : X → X → Prop).
@@ -22,7 +23,7 @@ Definition mso := (clos_trans mso_step).
 
 Infix "⊏⁺" := mso.
 
-Theorem Acc_mso_iff l : Acc ⊏⁺ l ↔ Forall (Acc <) l.
+Theorem Acc_mso_iff l : Acc ⊏⁺ l ↔ ∀x, x ∈ l → Acc R x.
 
 Corollary mso_wf : well_founded < → well_founded ⊏⁺.
 ```
