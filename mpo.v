@@ -159,8 +159,8 @@ Section multiset_path_ordering.
 
   End term_fall.
 
-  (* t(erm)perm is nested permutations on the term, ie we can permute
-     sons, but sons themselves can be internally permuted etc ... 
+  (* t(erm)perm are nested permutations on terms, ie one can permute
+     sons, but sons themselves can be internaly permuted etc ... 
      so f[x[a,b],y] ~ₜ f[y,x[b,a]] for instance  *)
   Inductive tperm : term → term → Prop :=
     | tperm_intro f l m : perm_eq tperm l m
