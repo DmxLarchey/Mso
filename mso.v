@@ -20,7 +20,8 @@ Set Implicit Arguments.
    see papers/multiset.ps for a local copy *)
 
 #[local] Notation "x ∈ l" := (In x l) (at level 70, no associativity, format "x  ∈  l").
-#[local] Notation "l '~ₚ' m" := (@Permutation _ l m) (at level 70, no associativity, format "l  ~ₚ  m").
+#[local] Notation "l ~ₚ m" := (@Permutation _ l m) (at level 70, no associativity, format "l  ~ₚ  m").
+#[local] Notation "R ⁻¹" := (λ x y, R y x) (at level 1, left associativity, format "R ⁻¹").
 
 Arguments clos_trans {_}.
 Arguments clos_refl_trans {_}.
@@ -61,10 +62,149 @@ Section utilities.
   
   Hint Resolve clos_trans__clos_refl_trans : core.
 
-  Fact clos_trans_inv_right R x z : clos_trans R x z → ∃y, clos_refl_trans R x y ∧ R y z.
-  Proof. induction 1 as [ | ? ? ? ? _ _ (? & []) ]; eauto. Qed.
+  Fact clos_refl_trans__clos_trans R x y : clos_refl_trans R x y ↔ x = y ∨ clos_trans R x y.
+  Proof.
+    split.
+    + induction 1 as [ | | ? ? ? _ [] _ [] ]; subst; eauto.
+    + intros [ <- | ]; eauto.
+  Qed.
+
+  Fact clos_trans_inv_right R x z : clos_trans R x z ↔ ∃y, clos_refl_trans R x y ∧ R y z.
+  Proof. 
+    split.
+    + induction 1 as [ | ? ? ? ? _ _ (? & []) ]; eauto.
+    + intros (? & [ <- | ]%clos_refl_trans__clos_trans & H2); eauto.
+  Qed.
 
 End utilities.
+
+Fact Forall2_middle_inv_left X Y (R : X → Y → Prop) l x r m :
+  Forall2 R (l++[x]++r) m → ∃ l' y r', m = l'++[y]++r' ∧ Forall2 R l l' ∧ Forall2 R r r'.
+Proof.
+  intros (l' & [ | y r' ] & H1 & H2 & ->)%Forall2_app_inv_l.
+  1: now inversion H2.
+  apply Forall2_cons_iff in H2 as (? & ?).
+  exists l', y, r'; auto.
+Qed.
+
+Fact Permutation_head_inv X (x : X) k m :
+    x::k ~ₚ m → ∃ l r, m = l++x::r ∧ k ~ₚ l++r.
+Proof.
+  intros H.
+  destruct (in_split x m) as (l & r & ->).
+  + apply Permutation_in with (1 := H); simpl; auto.
+  + exists l, r; split; auto.
+    now apply Permutation_cons_inv with x,
+          perm_trans with (1 := H), 
+          Permutation_sym,
+          Permutation_cons_app.
+Qed.
+
+Fact Forall2_xchg X Y (R : X → Y → Prop) l m : Forall2 R l m → Forall2 R⁻¹ m l.
+Proof. induction 1; eauto. Qed.
+
+Fact Forall2_impl_dep X Y (R T : X → Y → Prop) l m :
+  (∀ x y, x ∈ l → y ∈ m → R x y → T x y) → Forall2 R l m → Forall2 T l m.
+Proof.
+  intros H1 H2; revert H2 H1.
+  induction 1; simpl; intro; constructor; eauto.
+Qed.
+
+#[local] Hint Resolve in_eq in_cons : core.
+
+Fact Forall2_trans_dep X (R : X → X → Prop) l m k :
+    (∀ x y z, x ∈ l → y ∈ m → z ∈ k → R x y → R y z → R x z)
+  → Forall2 R l m
+  → Forall2 R m k
+  → Forall2 R l k.
+Proof.
+  intros H1 H2; revert H2 k H1.
+  induction 1 as [ | x y l m H1 H2 IH2 ]; intros k H3; auto.
+  + destruct k as [ | z k ]; [ now inversion 1 | ].
+    intros (H4 & H5)%Forall2_cons_iff.
+    constructor; eauto.
+    revert H5; apply IH2; eauto.
+Qed.
+
+Fact Forall2_In_inv X Y (R : X → Y → Prop) x l m :
+  Forall2 R l m → x ∈ l → ∃y, R x y ∧ y ∈ m.
+Proof.
+  induction 1 as [ | a b l m H1 H2 IH2 ].
+  + now inversion 1.
+  + intros [ <- | (? & [])%IH2 ]; eauto.
+Qed.
+
+Fact Forall2_perm_xchg [X Y] [E : X → Y → Prop] [l m k] :
+  Forall2 E l m → m ~ₚ k → ∃p, l ~ₚ p ∧ Forall2 E p k.
+Proof.
+  induction 1 as [ | s t l m H1 H2 IH2 ] in k |- *.
+  + intros ->%Permutation_nil; exists []; eauto.
+  + intros (k1 & k2 & -> & (p & ? & (l1 & l2 & ? & ? & ->)%Forall2_app_inv_r)%IH2)%Permutation_head_inv.
+    exists (l1++s::l2); split.
+    * now apply Permutation_cons_app.
+    * apply Forall2_app; auto.
+Qed.
+
+Fact perm_Forall2_xchg [X Y] [E : X → Y → Prop] [l m k] :
+  l ~ₚ m → Forall2 E m k →  ∃p, Forall2 E l p ∧ p ~ₚ k.
+Proof.
+  intros H1%Permutation_sym H2%Forall2_xchg.
+  destruct (Forall2_perm_xchg H2 H1) as (? & ? & ?%Forall2_xchg); eauto.
+Qed.
+
+Section perm_eq.
+
+  Variable (X : Type).
+
+  Implicit Type (E : X → X → Prop).
+
+  Inductive perm_eq E : list X → list X → Prop :=
+    | perm_eq_intro l m k : Forall2 E l m → m ~ₚ k → perm_eq E l k.
+
+  Hint Constructors perm_eq : core.
+
+  Fact perm_eq_refl E l :
+      (∀x, x ∈ l → E x x)
+    → perm_eq E l l.
+  Proof.
+    constructor 1 with l; auto.
+    rewrite <- Forall_forall in H.
+    induction H; eauto.
+  Qed.
+
+  Fact perm_eq_xchg E l m : perm_eq E l m → ∃p, l ~ₚ p ∧ Forall2 E p m.
+  Proof.
+    destruct 1 as [ l m k H1 H2 ].
+    apply (Forall2_perm_xchg H1 H2).
+  Qed.
+
+  Hint Resolve Permutation_sym Permutation_in : core.
+
+  Fact perm_eq_sym E l m :
+      (∀ x y, x ∈ l → y ∈ m → E x y → E y x)
+    → perm_eq E l m
+    → perm_eq E m l.
+  Proof.
+    intros Hlm (p & H1 & H2%Forall2_xchg)%perm_eq_xchg.
+    constructor 1 with p; auto.
+    revert H2; apply Forall2_impl_dep; eauto.
+  Qed.
+
+  Fact perm_eq_trans E l m k : 
+      (∀ x y z, x ∈ l → y ∈ m → z ∈ k → E x y → E y z → E x z)
+    → perm_eq E l m
+    → perm_eq E m k
+    → perm_eq E l k.
+  Proof.
+    intros Hlmk.
+    intros (u & H1 & H2)%perm_eq_xchg.
+    destruct 1 as [ m v k H3 H4 ].
+    assert (Forall2 E u v) as Huv.
+    1: revert H2 H3; apply Forall2_trans_dep; eauto.
+    destruct (perm_Forall2_xchg H1 Huv) as (? & []); eauto.
+  Qed.
+
+End perm_eq.
 
 Section multiset_order.
 
@@ -84,8 +224,8 @@ Section multiset_order.
   Inductive mso_step : list X → list X → Prop :=
     | mso_step_intro l m x r : m <ₗ x 
                              → l++m++r ⊏ l++[x]++r
-    | mso_step_perm_l l m k  : l ~ₚ m 
-                             → l ⊏ k 
+    | mso_step_perm_l l m k  : l ~ₚ m
+                             → l ⊏ k
                              → m ⊏ k
   where "l ⊏ m" := (mso_step l m).
 
@@ -290,7 +430,36 @@ Section multiset_order.
 
   Corollary mso_wf : well_founded mso.
   Proof. intro; apply Acc_mso_iff; auto. Qed.
- 
+
+  Fact mso_step_Forall2 (E : X → X → Prop) p l m :
+     (∀ x y z, y ∈ l → z ∈ m → x < y → E y z → x < z)
+   → p ⊏ l → Forall2 E l m → p ⊏⁺ m.
+  Proof.
+    intros H1 H2 H3.
+    revert H3 p H2 H1.
+    induction 1 as [ | x y l m H1 H2 IH2 ].
+    + now intros ? ?%mso_step_nil_right_inv.
+    + intros p [(u & H3 & H4)|]%mso_step_cons_right_inv G.
+      * apply mso_perm_l with (1 := Permutation_sym H3).
+        apply mso_trans with (y::l).
+        - apply mso_ctx with (l := []) (v := [_]).
+          apply mso_intro.
+          intros z Hz.
+          apply G with (3 := H4 _ Hz); auto.
+        - rewrite <- (app_nil_r l), <- (app_nil_r m).
+          apply mso_ctx with (l := [_]).
+
+  Admitted.
+
+  Fact mso_Forall2 (E : X → X → Prop) p l m :
+     (∀ x y z, y ∈ l → z ∈ m → x < y → E y z → x < z)
+   → p ⊏⁺ l → Forall2 E l m → p ⊏⁺ m.
+  Proof.
+    intros H1 (q & H2 & H3)%clos_trans_inv_right H4.
+    apply clos_rt_t with (1 := H2).
+    apply mso_step_Forall2 with (3 := H4); auto.
+  Qed.
+
 End multiset_order.
 
 Arguments mso {_}.

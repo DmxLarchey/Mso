@@ -7,7 +7,7 @@
 (*        Mozilla Public License Version 2.0, MPL-2.0         *)
 (**************************************************************)
 
-Require Import List Wellfounded Relations Utf8.
+Require Import List Wellfounded Relations Permutation Utf8.
 Import ListNotations.
 
 Require Import mso.
@@ -20,6 +20,9 @@ Set Implicit Arguments.
    http://www.lsv.ens-cachan.fr/Publis/PAPERS/PDF/JGL-mfcs13.pdf *)
 
 #[local] Notation "x ∈ l" := (In x l) (at level 70, no associativity, format "x  ∈  l").
+#[local] Notation "l ~ₚ m" := (@Permutation _ l m) (at level 70, no associativity, format "l  ~ₚ  m").
+#[local] Reserved Notation "l ~ₜ m" (at level 70, no associativity, format "l  ~ₜ  m").
+#[local] Notation "R ⁻¹" := (λ x y, R y x) (at level 1, left associativity, format "R ⁻¹").
 
 Section lex2.
 
@@ -156,38 +159,121 @@ Section multiset_path_ordering.
 
   End term_fall.
 
+  (* t(erm)perm is nested permutations on the term, ie we can permute
+     sons, but sons themselves can be internally permuted etc ... 
+     so f[x[a,b],y] ~ₜ f[y,x[b,a]] for instance  *)
+  Inductive tperm : term → term → Prop :=
+    | tperm_intro f l m : perm_eq tperm l m
+                        → tperm (node f l) (node f m).
+
+  Hint Constructors tperm : core.
+
+  Infix "~ₜ" := tperm.
+
+  Fact tperm_inv s t :
+       s ~ₜ t
+     → match s, t with
+       | node f l, node g m =>
+          f = g ∧ perm_eq tperm l m
+      end.
+  Proof. destruct 1; eauto. Qed.
+
+  Hint Resolve perm_eq_refl perm_eq_sym perm_eq_trans : core.
+
+  Fact tperm_xchg {l m k} :
+      Forall2 tperm l m
+    → m ~ₚ k 
+    → ∃p, l ~ₚ p 
+        ∧ Forall2 tperm p k.
+  Proof. apply Forall2_perm_xchg. Qed.
+
+  (* tperm is an equivalence relation *)
+
+  Fact tperm_refl t : t ~ₜ t.
+  Proof. induction t; eauto. Qed. 
+
+  Fact tperm_sym s t : s ~ₜ t → t ~ₜ s.
+  Proof. revert t; induction s; intros [] []%tperm_inv; subst; eauto. Qed.
+
+  Fact tperm_trans r s t : r ~ₜ s → s ~ₜ t → r ~ₜ t.
+  Proof. revert r t; induction s; intros [] [] []%tperm_inv []%tperm_inv; subst; eauto. Qed.
+
+  Hint Resolve tperm_refl tperm_sym tperm_trans : core.
+
   (** The multiset path ordering *)
 
   Variables (R : X → X → Prop).
 
   (* mpo is is a nested form of mso *)
   Inductive mpo : term → term → Prop :=
-    | mpo_in_lt s f t l : t ∈ l
-                        → mpo s t
-                        → mpo s (node f l)
-    | mpo_in_eq t g m :   t ∈ m
-                        → mpo t (node g m)
-    | mpo_lt f l g m :    (∀r, r ∈ l → mpo r (node g m))
-                        → R f g
-                        → mpo (node f l) (node g m)
-    | mpo_eq l g m :      (∀r, r ∈ l → mpo r (node g m))
-                        → mso mpo l m
-                        → mpo (node g l) (node g m).
+    | mpo_in_lt s t g m :   t ∈ m
+                          → mpo s t
+                          → mpo s (node g m)
+    | mpo_in_eq s t g m :   t ∈ m
+                          → s ~ₜ t
+                          → mpo s (node g m)
+    | mpo_lt f l g m :      (∀r, r ∈ l → mpo r (node g m))
+                          → R f g
+                          → mpo (node f l) (node g m)
+    | mpo_eq l g m :        (∀r, r ∈ l → mpo r (node g m))
+                          → mso mpo l m
+                          → mpo (node g l) (node g m).
 
   Fact mpo_inv s t :
       mpo s t 
     → match s, t with
       | node f l, node g m =>
           (∃r, r ∈ m ∧ mpo s r)
-        ∨ s ∈ m
+        ∨ (∃r, r ∈ m ∧ s ~ₜ r)
         ∨ (R f g ∧ ∀r, r ∈ l → mpo r (node g m))
-        ∨ (f = g ∧ mso mpo l m  ∧ ∀r, r ∈ l → mpo r (node g m))
+        ∨ (f = g ∧ mso mpo l m ∧ ∀r, r ∈ l → mpo r (node g m))
       end.
   Proof.
     destruct 1; eauto.
     + destruct s; eauto.
-    + destruct t; auto.
+    + destruct s; eauto.
     + do 3 right; auto.
+  Qed.
+
+  Hint Constructors tperm : core.
+
+  Fact tperm_mpo_right r s t : s ~ₜ t → mpo r s → mpo r t.
+  Proof.
+    revert r t.
+    induction s as [ g l IHs ];
+    induction r as [ f p IHr ].
+    intros [ h m ].
+    intros (<- & k & H1 & H2)%tperm_inv.
+    intros [ (r & H3 & H4) 
+         | [ (r & H3 & H4)
+         | [ (H3 & H4)
+           | (<- & H3 & H4) ]
+            ] ]%mpo_inv.
+    + destruct (tperm_xchg H1 H2) as (u & H5 & H6).
+      destruct Forall2_In_inv
+        with (1 := H6) (x := r)
+        as (v & H7 & H8); eauto.
+      constructor 1 with v; eauto.
+    + destruct (tperm_xchg H1 H2) as (u & H5 & H6).
+      destruct Forall2_In_inv
+        with (1 := H6) (x := r)
+        as (v & H7 & H8); eauto.
+      constructor 2 with v; eauto.
+    + constructor 3; eauto.
+    + constructor 4; eauto.
+      apply mso_perm_r with (1 := H2).
+      revert H3.
+      assert (forall x y z, x ∈ p → y ∈ l → z ∈ k → y ~ₜ z → mpo x y → mpo x z).
+      1: eauto. intros ? ? ? ? ? ?; apply IHs.
+  Admitted.
+
+  Fact tperm_Acc_mpo s t : s ~ₜ t → Acc mpo s → Acc mpo t.
+  Proof.
+    intros H1 H2; revert H2 t H1.
+    induction 1 as [ s _ IHs ]; intros t Hst.
+    constructor.
+    intros r Hr.
+    generalize (tperm_mpo_right (tperm_sym Hst) Hr); eauto.
   Qed.
 
   Hint Constructors lex2 : core.
@@ -203,11 +289,12 @@ Section multiset_path_ordering.
     rewrite Acc_mso_iff in Hm.
     constructor; intros s.
     induction s as [ f l IHl ].
-    intros [ (? & [])  
-         | [
+    intros [ (? & [])
+         | [ (? & [])
          | [ []
            | (<- & []) ] ] ]%mpo_inv; eauto.
-    apply IH; eauto.
+    + admit.
+    + apply IH; eauto.
   Qed.
 
   Hint Resolve Acc_mpo_node : core.
