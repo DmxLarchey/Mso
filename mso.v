@@ -506,6 +506,7 @@ Section multiset_order.
   Corollary mso_wf : well_founded mso.
   Proof. intro; apply Acc_mso_iff; auto. Qed.
 
+(*
   Fact mso_step_Forall2 (E : X → X → Prop) p l m :
      (∀ x y z, y ∈ l → z ∈ m → x < y → E y z → x < z)
    → p ⊏ l → Forall2 E l m → p ⊏⁺ m.
@@ -534,6 +535,7 @@ Section multiset_order.
     apply clos_rt_t with (1 := H2).
     apply mso_step_Forall2 with (3 := H4); auto.
   Qed.
+*)
 
 End multiset_order.
 

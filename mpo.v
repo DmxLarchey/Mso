@@ -216,7 +216,7 @@ Section multiset_path_ordering.
                           → R f g
                           → mpo (node f l) (node g m)
     | mpo_eq l g m :        (∀r, r ∈ l → mpo r (node g m))
-                          → mso mpo l m
+                          → mso mpo tperm l m
                           → mpo (node g l) (node g m).
 
   Fact mpo_inv s t :
@@ -226,7 +226,7 @@ Section multiset_path_ordering.
           (∃r, r ∈ m ∧ mpo s r)
         ∨ (∃r, r ∈ m ∧ s ~ₜ r)
         ∨ (R f g ∧ ∀r, r ∈ l → mpo r (node g m))
-        ∨ (f = g ∧ mso mpo l m ∧ ∀r, r ∈ l → mpo r (node g m))
+        ∨ (f = g ∧ mso mpo tperm l m ∧ ∀r, r ∈ l → mpo r (node g m))
       end.
   Proof.
     destruct 1; eauto.
@@ -243,7 +243,7 @@ Section multiset_path_ordering.
     induction s as [ g l IHs ];
     induction r as [ f p IHr ].
     intros [ h m ].
-    intros (<- & k & H1 & H2)%tperm_inv.
+    intros (<- & Hlm)%tperm_inv.
     intros [ (r & H3 & H4) 
          | [ (r & H3 & H4)
          | [ (H3 & H4)
