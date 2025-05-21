@@ -28,11 +28,11 @@ Arguments transitive {_}.
 
 #[local] Hint Constructors clos_trans clos_refl_trans : core.
 
-Section utilities.
+Section list_utils.
 
   Variable (X : Type).
 
-  Implicit Types (x : X) (l : list X) (R : X → X → Prop) (P : X → Prop).
+  Implicit Types (x : X) (l : list X).
 
   Fact cons_inj x y l m : x::l = y::m → x = y ∧ l = m.
   Proof. now inversion 1. Qed.
@@ -49,6 +49,14 @@ Section utilities.
     + now rewrite Forall_cons_iff, IHl.
   Qed.
 
+End list_utils.
+
+Section perm_utils.
+
+  Variable (X : Type).
+
+  Implicit Types (x : X) (l : list X).
+
   Fact Permutation_middle_inv l x r m :
     l++[x]++r ~ₚ m → ∃ l' r', m = l'++[x]++r' ∧ l++r ~ₚ l'++r'.
   Proof.
@@ -56,7 +64,28 @@ Section utilities.
     assert (x ∈ m) as (l' & r' & ->)%in_split; simpl; eauto.
     apply Permutation_in with (1 := H); auto.
   Qed.
+
+  Fact Permutation_head_inv x k m :
+    x::k ~ₚ m → ∃ l r, m = l++x::r ∧ k ~ₚ l++r.
+  Proof.
+    intros H.
+    destruct (in_split x m) as (l & r & ->).
+    + apply Permutation_in with (1 := H); simpl; auto.
+    + exists l, r; split; auto.
+      now apply Permutation_cons_inv with x,
+            perm_trans with (1 := H), 
+            Permutation_sym,
+            Permutation_cons_app.
+  Qed.
   
+End perm_utils.
+
+Section rel_utils.
+
+  Variable (X : Type).
+
+  Implicit Types (R : X → X → Prop) (P : X → Prop).
+
   Fact clos_trans__clos_refl_trans R x y : clos_trans R x y → clos_refl_trans R x y.
   Proof. induction 1; eauto. Qed. 
   
@@ -76,7 +105,12 @@ Section utilities.
     + intros (? & [ <- | ]%clos_refl_trans__clos_trans & H2); eauto.
   Qed.
 
-End utilities.
+End rel_utils.
+
+(* Forall/Forall2 utils *)
+
+Fact Forall2_diag X (R : X → X → Prop) l : Forall (λ x, R x x) l → Forall2 R l l.
+Proof. induction 1; eauto. Qed.
 
 Fact Forall2_middle_inv_left X Y (R : X → Y → Prop) l x r m :
   Forall2 R (l++[x]++r) m → ∃ l' y r', m = l'++[y]++r' ∧ R x y ∧ Forall2 R l l' ∧ Forall2 R r r'.
@@ -87,24 +121,13 @@ Proof.
   exists l', y, r'; auto.
 Qed.
 
-Fact Permutation_head_inv X (x : X) k m :
-    x::k ~ₚ m → ∃ l r, m = l++x::r ∧ k ~ₚ l++r.
-Proof.
-  intros H.
-  destruct (in_split x m) as (l & r & ->).
-  + apply Permutation_in with (1 := H); simpl; auto.
-  + exists l, r; split; auto.
-    now apply Permutation_cons_inv with x,
-          perm_trans with (1 := H), 
-          Permutation_sym,
-          Permutation_cons_app.
-Qed.
-
 Fact Forall2_xchg X Y (R : X → Y → Prop) l m : Forall2 R l m → Forall2 R⁻¹ m l.
 Proof. induction 1; eauto. Qed.
 
 Fact Forall2_impl_dep X Y (R T : X → Y → Prop) l m :
-  (∀ x y, x ∈ l → y ∈ m → R x y → T x y) → Forall2 R l m → Forall2 T l m.
+    (∀ x y, x ∈ l → y ∈ m → R x y → T x y) 
+  → Forall2 R l m
+  → Forall2 T l m.
 Proof.
   intros H1 H2; revert H2 H1.
   induction 1; simpl; intro; constructor; eauto.
@@ -142,9 +165,6 @@ Proof.
     * now apply Permutation_cons_app.
     * apply Forall2_app; auto.
 Qed.
-
-Fact Forall2_diag X (R : X → X → Prop) l : Forall (λ x, R x x) l → Forall2 R l l.
-Proof. induction 1; eauto. Qed.
 
 Fact perm_Forall2_xchg [X Y] [E : X → Y → Prop] [l m k] :
   l ~ₚ m → Forall2 E m k → ∃p, Forall2 E l p ∧ p ~ₚ k.

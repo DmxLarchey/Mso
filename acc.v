@@ -32,7 +32,7 @@ Section lex2.
   Hint Constructors lex2 : core.
 
   Fact lex2_inv p q :
-      lex2 p q 
+      lex2 p q
     ↔ match p, q with
       | (x₁,y₁), (x₂,y₂) => R x₁ x₂ ∨ x₁ = x₂ ∧ T y₁ y₂
       end.

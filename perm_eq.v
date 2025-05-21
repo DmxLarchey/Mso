@@ -14,7 +14,14 @@ Require Import utils.
 
 Set Implicit Arguments.
 
+#[local] Reserved Notation "l ~ₑ m" (at level 70, format "l  ~ₑ  m" ).
+
 Section perm_eq.
+
+  (** We define the notion of "permutable up to an equivalence"
+      and provided relativized version of equivalence lemmas
+      so that this construction can be applied in a nested way
+      on rose trees. *)
 
   Hint Resolve Permutation_app 
                Permutation_sym
@@ -27,11 +34,10 @@ Section perm_eq.
   Variable (X : Type) (E : X → X → Prop).
 
   Inductive perm_eq (l k : list X) : Prop :=
-    | perm_eq_intro m : Forall2 E l m → m ~ₚ k → perm_eq l k.
+    | perm_eq_intro m : Forall2 E l m → m ~ₚ k → l ~ₑ k
+  where "l ~ₑ m" := (perm_eq l m).
 
   Hint Constructors perm_eq : core.
-  
-  Notation "l ~ₑ m" := (perm_eq l m) (at level 70, format "l  ~ₑ  m" ).
 
   Fact perm_eq_in_inv l m x : l ~ₑ m → x ∈ l → ∃y, y ∈ m ∧ E x y.
   Proof.
