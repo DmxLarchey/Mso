@@ -37,6 +37,9 @@ Section multiset_path_ordering.
   
   Notation "⟨ f | l ⟩ₜ" := (node f l).
 
+  Definition root t := match t with ⟨f|_⟩ₜ => f end.
+  Definition sons t := match t with ⟨_|l⟩ₜ => l end.
+
   Section term_ind.
 
     (* Induction principle for rose trees *)
