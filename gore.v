@@ -175,39 +175,18 @@ Section ctxt.
     right; do 5 eexists; eauto.
   Qed.
 
-  Variables (R : _) (R_wf : well_founded R). 
-
-  Fact Acc_fall t : Forall (Acc (ctxt R)) (sons t) → Acc (ctxt R) t.
-  Proof.
-    rewrite -> Forall_forall, <- Acc_lo_step_iff.
-    induction t as [ [f m] IH ] using (well_founded_induction R_wf).
-    simpl; intros Hm.
-    constructor.
-    intros s [ | ]%ctxt_inv; eauto.
-    + apply IH; auto.
-    change m with (sons ⟨f|m⟩ₜ) at 2.
-    generalize ⟨f|m⟩ₜ; clear f m.
-    induction 1 as [ [f m] _ IH1 ]; simpl.
-    induction 1 as [ m _ IH2 ].
-    
-    + apply IH1; auto.
-  Admitted.
-  
-  Fact wf_ctxt R : well_founded R → well_founded (ctxt R).
-  Proof.
-    intros HR t.
-    induction t as [ f m IHm ].
-    rewrite <- Forall_forall in IHm.
-    apply Acc_fall; auto.
-  Qed.
-
   Hint Constructors ctxt : core.
   
   Fact ctxt_idem R r s : ctxt (ctxt R) r s → ctxt R r s.
   Proof. induction 1; auto. Qed.
   
+  (** Fails: g[] > g[g[]] as single reduction
+      gives  g[] > g²[] > g³[] > ... as in the contextual closure 
+  
+  Fact wf_ctxt R : well_founded R → well_founded (ctxt R). *)
+
   Let SN := @Acc (term X).
-  Let fwf R r t := R r t /\ SN R t.
+  Let fwf R r t := R r t /\ SN R t. 
 
   Variables (R : term X → term X → Prop).
 
@@ -218,12 +197,3 @@ Section ctxt.
   
   Fact sn1__sn2 r t : sn1 r t → sn2 r t.
   Proof. now constructor 1. Qed.
-  (*
-  
-  
-  
-  Inductive sn2 : term X → term X → Prop :=
-    | sn1_intro f l p q r : SN q → ctxt p q → sn1 ⟨f|l++[p]++r⟩ₜ ⟨f|l++[q]++r⟩ₜ.
-    
-    (node f ()) (node f (l++[p]++r))
-*)
