@@ -156,6 +156,80 @@ Section mono.
 End mono.
 *)
 
+Definition restr₂ {X} (R : X → X → Prop) (P : X → Prop) (u v : sig P) :=
+  R (proj1_sig u) (proj1_sig v).
+
+Definition restr₁ {X} (Q : X → Prop) (P : X → Prop) (u : sig P) :=
+  Q (proj1_sig u).
+
+Inductive cover {X} (T : X → X → Prop) (P : X → Prop) x : Prop :=
+  | cover_stop : P x → cover T P x
+  | cover_next : (∀y, T x y → cover T P y) → cover T P x.
+
+Hint Constructors cover : core.
+
+Inductive covers {X} (T : X → X → Prop) (Q P : X → Prop) x : Prop :=
+  | covers_stop : Q x → P x → covers T Q P x
+  | covers_next : Q x → (∀y, Q y → T x y → covers T Q P y) → covers T Q P x.
+
+Hint Constructors covers : core.
+
+Fact covers__sub X T Q P x : @covers X T Q P x → Q x.
+Proof. now intros []. Qed.
+
+Fact covers__cover_restr X T Q P x : @covers X T Q P x → forall hx : Q x, cover (restr₂ T Q) (restr₁ P Q) (exist _ x hx).
+Proof.
+  induction 1 as [ x H1 H2 | x H1 H2 IH2 ]; intros hx.
+  + constructor 1; red; auto.
+  + constructor 2; intros (y & hy) H; apply IH2; auto.
+Qed.
+
+Fact cover_restr__covers X T Q P x : cover (restr₂ T Q) (restr₁ P Q) x → @covers X T Q P (proj1_sig x).
+Proof.
+  induction 1 as [ [x hx] H1 | [x hx] H1 IH1 ].
+  + constructor; auto.
+  + constructor 2; auto.
+    intros y hy ?.
+    now apply (IH1 (exist _ y hy)).
+Qed.
+
+Theorem cover_restr_iff_covers X T Q P x : cover (restr₂ T Q) (restr₁ P Q) x ↔ @covers X T Q P (proj1_sig x).
+Proof.
+  split.
+  + apply cover_restr__covers.
+  + destruct x; intro; now apply covers__cover_restr.
+Qed.
+
+Definition gindy {X} (T : X → X → Prop) (P : X → Prop) x :=
+  (∀y, T x y → P y) → P x.
+
+Fact gindy_cover X T P x : gindy T (@cover X T P) x.
+Proof. red; now constructor 2. Qed. 
+
+Section cover_morphism.
+
+  (* Transfert of the cover predicate using a morphism *)
+
+  Variables (X Y : Type) (R : X → X → Prop) (T : Y → Y → Prop)
+            (P : X → Prop) (Q : Y → Prop)
+            (f : Y → X → Prop)
+            (Hf : ∀y, exists x, f y x)
+            (HPQ : ∀ y x, f y x → P x → Q y)
+            (HRT : ∀ y₁ y₂ x₁ x₂, f y₁ x₁ → f y₂ x₂ → T y₁ y₂ → R x₁ x₂).
+
+  Lemma cover_morphism x y : f y x → cover R P x → cover T Q y.
+  Proof.
+    intros Hy H; revert H y Hy.
+    induction 1 as [ | x _ IHx ]; eauto.
+    intros y Hyx; constructor 2.
+    intros y' Hy'.
+    destruct (Hf y') as (x' & Hx'); eauto.
+  Qed.
+
+End cover_morphism.
+
+
+
 Section ctxt.
 
   Variables (X : Type).
