@@ -7,7 +7,7 @@
 (*        Mozilla Public License Version 2.0, MPL-2.0         *)
 (**************************************************************)
 
-Require Import List Wellfounded Relations Permutation Utf8.
+Require Import List Wellfounded Relations Permutation Arith Lia Utf8.
 Import ListNotations.
 
 Require Import utils acc perm_eq mso mpo.
@@ -164,13 +164,13 @@ Definition restr₁ {X} (Q : X → Prop) (P : X → Prop) (u : sig P) :=
 
 Inductive cover {X} (T : X → X → Prop) (P : X → Prop) x : Prop :=
   | cover_stop : P x → cover T P x
-  | cover_next : (∀y, T x y → cover T P y) → cover T P x.
+  | cover_next : (∀y, T y x → cover T P y) → cover T P x.
 
 Hint Constructors cover : core.
 
 Inductive covers {X} (T : X → X → Prop) (Q P : X → Prop) x : Prop :=
   | covers_stop : Q x → P x → covers T Q P x
-  | covers_next : Q x → (∀y, Q y → T x y → covers T Q P y) → covers T Q P x.
+  | covers_next : Q x → (∀y, Q y → T y x → covers T Q P y) → covers T Q P x.
 
 Hint Constructors covers : core.
 
@@ -200,11 +200,93 @@ Proof.
   + destruct x; intro; now apply covers__cover_restr.
 Qed.
 
-Definition gindy {X} (T : X → X → Prop) (P : X → Prop) x :=
-  (∀y, T x y → P y) → P x.
+Notation wfp := Acc.
 
-Fact gindy_cover X T P x : gindy T (@cover X T P) x.
-Proof. red; now constructor 2. Qed. 
+Fact wfp_clos_rt X T x y : @clos_refl_trans X T x y → wfp T y → wfp T x.
+Proof. induction 1; eauto. Qed.  
+
+Section bars.
+
+  Variables (X : Type).
+  
+  Implicit Types (T : X → X → Prop) (P Q : X → Prop).
+
+  Definition gindy T P x := (∀y, T y x → P y) → P x.
+
+  Inductive bars T P x : Prop :=
+    | bars_stop : P x → bars T P x
+    | bars_next : (∀y, T y x → bars T P y) → bars T P x.
+
+  Inductive gbars T Q P x : Prop :=
+    | gbars_stop : P x → gbars T Q P x
+    | gbars_next : Q x → (∀y, T y x → gbars T Q P y) → gbars T Q P x.
+
+  Hint Constructors gbars bars : core.
+
+  Fact bars_iff_gbars T P x : bars T P x ↔ gbars T (λ _, True) P x.
+  Proof. split; induction 1; eauto. Qed.
+
+  Fact gindy_cover T P x : gindy T (bars T P) x.
+  Proof. red; auto. Qed. 
+
+  Fact covers__gbars T Q P x : covers T Q P x → gbars T Q P x.
+  Proof.
+    induction 1 as [ | x H1 H2 IH2 ]; eauto.
+    constructor 2; auto.
+  Admitted.
+
+  Fact gbars_sequence T Q P x : gbars T Q P x → ∀f, f 0 = x → (∀n, T (f (S n)) (f n)) → ∃n, P (f n) ∧ ∀i, i < n → Q (f i).
+  Proof.
+    induction 1 as [ x Hx | x H1 H2 IH2 ]; intros f <- Hf2.
+    + exists 0; split; auto; lia.
+    + destruct (IH2 _ (Hf2 0) (fun n => f (S n))) as (n & G1 & G2); auto.
+      exists (S n); split; auto.
+      intros [|i] ?; auto; apply G2; lia.
+  Qed.
+
+  Fact bars_iff_wfp T x : bars T (λ _, False) x ↔ wfp T x.
+  Proof. split; induction 1; now eauto. Qed.
+
+  Fact bars_sequence T P x : bars T P x → ∀f, f 0 = x → (∀n, T (f (S n)) (f n)) → ∃n, P (f n).
+  Proof.
+    rewrite bars_iff_gbars.
+    intros H f H1 H2.
+    destruct (gbars_sequence _ _ _ _ H f H1 H2) as (n & []); eauto.
+  Qed.
+  
+  Fact gbars_gindy T P x : gbars T (gindy T P) P x ↔ P x.
+  Proof. split; auto; induction 1; eauto. Qed.
+  
+  Fact gindy_gbars T Q P x : Q x → gindy T (gbars T Q P) x.
+  Proof. intros ? ?; eauto. Qed.
+  
+  Fact gindy_full T P : (∀x, gindy T P x) → ∀x, bars T P x ↔ P x.
+  Proof.
+    intros H; split; auto.
+    induction 1; eauto; now apply H.
+  Qed.
+  
+  Fact bars_wfp T x : bars T (wfp T) x ↔ wfp T x.
+  Proof. apply gindy_full; constructor; auto. Qed.
+  
+End bars.
+
+Arguments gbars {_}.
+Arguments bars {_}.
+  
+Local Fact gbars__bars X T Q P x : @gbars X T Q P x → ∀hx, bars (restr₂ T Q) (restr₁ P Q) (exist _ x hx).
+Proof.
+  induction 1; intro.
+  + constructor 1; red; auto.
+  + constructor 2; intros [] ?; auto.
+Qed.
+
+Local Fact bars__gbars X T Q P x : bars (restr₂ T Q) (restr₁ P Q) x → @gbars X T Q P (proj1_sig x).
+Proof.
+  induction 1 as [ [x hx] H1 | [x hx] H1 IH1 ].
+  + constructor; auto.
+  + constructor 2; auto.
+Admitted.
 
 Section cover_morphism.
 
@@ -229,6 +311,64 @@ Section cover_morphism.
 End cover_morphism.
 
 
+Section termination.
+
+  Variables (X : Type) (R T K : X → X → Prop).
+  
+  (* R := <| ; T := ρ ; K := << *)
+  
+  Section conditions.
+ 
+    Variables (s : X).
+  
+    Definition condition1a := (∀r, R r s → wfp T r) → bars T (gbars R (λ r, K r s) (wfp T)) s.
+    Definition condition1b := ∀t, T t s → (∀r, R r s → wfp T r) → gbars R (λ r, K r s)  (wfp T) t.
+    Definition condition1c := ∀t, T t s → gbars R (λ r, K r s) (λ v, ∃r, T v r ∧ R r s) t.
+    Definition condition1d := (∀r, wfp R r) ∧ ∀t, T t s → (∀r, R r s → wfp T r) → ∀r, clos_refl_trans R r t → wfp T r ∨ K r s.
+    Definition condition1e := (∀r, wfp R r) ∧ ∀ r t, T t s → clos_refl_trans R r t → (∃v, clos_refl_trans T r v ∧ R v s) ∨ K r s.
+    
+    Fact condition1_b_a : condition1b → condition1a.
+    Proof. intros H ?; constructor 2; constructor 1; now apply H. Qed.
+   
+    Hint Constructors clos_refl_trans : core.
+    
+    Fact condition1_d_b : condition1d → condition1b.
+    Proof.
+      intros (H1 & H2) t Ht H.
+      specialize (H2 _ Ht H).
+      clear Ht H.
+      induction t as [ t IH ] using (well_founded_induction H1).
+      destruct (H2 t); auto.
+      + now constructor 1.
+      + constructor 2; eauto.
+    Qed.
+   
+    Fact condition1_e_d : condition1e → condition1d.
+    Proof.
+      intros (H1 & H2); split; auto.
+      intros t Ht Hs r Hr.
+      destruct (H2 _ _ Ht Hr) as [ (v & H3 & H4) | ]; auto.
+      left.
+      apply Hs in H4.
+      revert H3 H4; apply wfp_clos_rt.
+    Qed.
+    
+    Fact condition1_c_b : condition1c → condition1b.
+    Proof.
+      intros H t Ht Hs.
+      generalize (H _ Ht).
+      induction 1 as [ x (r & H1 & H2) | x Hx H1 IH1 ]; eauto.
+      + apply Hs in H2.
+        constructor 1.
+        revert H2; apply wfp_clos_rt; auto.
+      + constructor 2; eauto.
+        intros y Hy.
+        apply IH1; auto.
+    Admitted.
+
+  End conditions.
+  
+End termination.
 
 Section ctxt.
 
