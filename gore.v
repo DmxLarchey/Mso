@@ -428,13 +428,16 @@ Section termination.
     → well_founded T.
   Proof.
     intros H1 H2 H3.
-    generalize (fun s => lemma6 _ (H1 s)); intros H4.
-    
-    Check gindy_full.
-  
-  
-  
+    generalize (gindy_full _ _ _ (fun s => lemma6 _ (H1 s))); intros H4.
+    assert (forall s, gindy R (wfp T) s) as H5.
+    1: intros s; apply H4, H2.
+    generalize (gindy_full _ _ _ H5); intros H6.
+    intro; apply H6, H3.
+  Qed.
+ 
 End termination.
+
+
 
 Section ctxt.
 
