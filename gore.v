@@ -200,6 +200,28 @@ Proof.
   + destruct x; intro; now apply covers__cover_restr.
 Qed.
 
+Section cover_morphism.
+
+  (* Transfert of the cover predicate using a morphism *)
+
+  Variables (X Y : Type) (R : X → X → Prop) (T : Y → Y → Prop)
+            (P : X → Prop) (Q : Y → Prop)
+            (f : Y → X → Prop)
+            (Hf : ∀y, exists x, f y x)
+            (HPQ : ∀ y x, f y x → P x → Q y)
+            (HRT : ∀ y₁ y₂ x₁ x₂, f y₁ x₁ → f y₂ x₂ → T y₁ y₂ → R x₁ x₂).
+
+  Lemma cover_morphism x y : f y x → cover R P x → cover T Q y.
+  Proof.
+    intros Hy H; revert H y Hy.
+    induction 1 as [ | x _ IHx ]; eauto.
+    intros y Hyx; constructor 2.
+    intros y' Hy'.
+    destruct (Hf y') as (x' & Hx'); eauto.
+  Qed.
+
+End cover_morphism.
+
 Notation wfp := Acc.
 
 Fact wfp_clos_rt X T x y : @clos_refl_trans X T x y → wfp T y → wfp T x.
@@ -273,7 +295,50 @@ End bars.
 
 Arguments gbars {_}.
 Arguments bars {_}.
-  
+Arguments gindy {_}.
+
+Section bars_morphism.
+
+  (* Transfert of the cover predicate using a morphism *)
+
+  Variables (X Y : Type) (R : X → X → Prop) (T : Y → Y → Prop)
+            (P : X → Prop) (Q : Y → Prop)
+            (f : Y → X → Prop)
+            (Hf : ∀y, ∃x, f y x)
+            (HPQ : ∀ y x, f y x → P x → Q y)
+            (HRT : ∀ y₁ y₂ x₁ x₂, f y₁ x₁ → f y₂ x₂ → T y₁ y₂ → R x₁ x₂).
+            
+  Hint Constructors bars : core.
+
+  Lemma bars_morphism x y : f y x → bars R P x → bars T Q y.
+  Proof.
+    intros Hy H; revert H y Hy.
+    induction 1 as [ | x _ IHx ]; eauto.
+    intros y Hyx; constructor 2.
+    intros y' Hy'.
+    destruct (Hf y') as (x' & Hx'); eauto.
+  Qed.
+
+End bars_morphism.
+
+Fact bars_mono X (R T : X → X → Prop) (P Q : X → Prop) :
+    (∀x, P x → Q x)
+  → (∀ x y, T x y → R x y)
+  →  ∀x, bars R P x → bars T Q x.
+Proof.
+  intros H1 H2 x.
+  apply bars_morphism with (f := eq); intros; subst; eauto.
+Qed.
+
+Hint Constructors gbars : core.
+
+Fact gbars_mono X (R T : X → X → Prop) (Q Q' P P' : X → Prop) :
+    (∀x, P x → P' x)
+  → (∀x, Q x → Q' x)
+  → (∀ x y, T x y → R x y)
+  →  ∀x, gbars R Q P x → gbars T Q' P' x.
+Proof. induction 4; eauto. Qed.
+
 Local Fact gbars__bars X T Q P x : @gbars X T Q P x → ∀hx, bars (restr₂ T Q) (restr₁ P Q) (exist _ x hx).
 Proof.
   induction 1; intro.
@@ -288,85 +353,86 @@ Proof.
   + constructor 2; auto.
 Admitted.
 
-Section cover_morphism.
-
-  (* Transfert of the cover predicate using a morphism *)
-
-  Variables (X Y : Type) (R : X → X → Prop) (T : Y → Y → Prop)
-            (P : X → Prop) (Q : Y → Prop)
-            (f : Y → X → Prop)
-            (Hf : ∀y, exists x, f y x)
-            (HPQ : ∀ y x, f y x → P x → Q y)
-            (HRT : ∀ y₁ y₂ x₁ x₂, f y₁ x₁ → f y₂ x₂ → T y₁ y₂ → R x₁ x₂).
-
-  Lemma cover_morphism x y : f y x → cover R P x → cover T Q y.
-  Proof.
-    intros Hy H; revert H y Hy.
-    induction 1 as [ | x _ IHx ]; eauto.
-    intros y Hyx; constructor 2.
-    intros y' Hy'.
-    destruct (Hf y') as (x' & Hx'); eauto.
-  Qed.
-
-End cover_morphism.
 
 
 Section termination.
 
   Variables (X : Type) (R T K : X → X → Prop).
-  
+
   (* R := <| ; T := ρ ; K := << *)
-  
+
   Section conditions.
- 
+
     Variables (s : X).
-  
+
     Definition condition1a := (∀r, R r s → wfp T r) → bars T (gbars R (λ r, K r s) (wfp T)) s.
     Definition condition1b := ∀t, T t s → (∀r, R r s → wfp T r) → gbars R (λ r, K r s)  (wfp T) t.
     Definition condition1c := ∀t, T t s → gbars R (λ r, K r s) (λ v, ∃r, T v r ∧ R r s) t.
     Definition condition1d := (∀r, wfp R r) ∧ ∀t, T t s → (∀r, R r s → wfp T r) → ∀r, clos_refl_trans R r t → wfp T r ∨ K r s.
     Definition condition1e := (∀r, wfp R r) ∧ ∀ r t, T t s → clos_refl_trans R r t → (∃v, clos_refl_trans T r v ∧ R v s) ∨ K r s.
     
+    (** Two chains (e) → (d) → (b) → (a)
+                         (c) → (b) *)
+    
     Fact condition1_b_a : condition1b → condition1a.
     Proof. intros H ?; constructor 2; constructor 1; now apply H. Qed.
-   
+
     Hint Constructors clos_refl_trans : core.
-    
+
+    Hint Constructors gbars : core.
+
     Fact condition1_d_b : condition1d → condition1b.
     Proof.
       intros (H1 & H2) t Ht H.
       specialize (H2 _ Ht H).
       clear Ht H.
       induction t as [ t IH ] using (well_founded_induction H1).
-      destruct (H2 t); auto.
-      + now constructor 1.
-      + constructor 2; eauto.
+      destruct (H2 t); eauto.
+      constructor 2; eauto.
     Qed.
+
+    Hint Resolve wfp_clos_rt : core.
    
     Fact condition1_e_d : condition1e → condition1d.
     Proof.
       intros (H1 & H2); split; auto.
       intros t Ht Hs r Hr.
-      destruct (H2 _ _ Ht Hr) as [ (v & H3 & H4) | ]; auto.
-      left.
-      apply Hs in H4.
-      revert H3 H4; apply wfp_clos_rt.
+      destruct (H2 _ _ Ht Hr) as [ (? & []) | ]; eauto.
     Qed.
-    
+
     Fact condition1_c_b : condition1c → condition1b.
     Proof.
-      intros H t Ht Hs.
-      generalize (H _ Ht).
-      induction 1 as [ x (r & H1 & H2) | x Hx H1 IH1 ]; eauto.
-      + apply Hs in H2.
-        constructor 1.
-        revert H2; apply wfp_clos_rt; auto.
-      + constructor 2; eauto.
-        intros y Hy.
-        apply IH1; auto.
-    Admitted.
+      intros H t Ht Hs; red in H.
+      generalize (H _ Ht); clear Ht.
+      induction 1 as [ ? (? & []) | ]; eauto.
+    Qed.
 
   End conditions.
+  
+  Lemma lemma6 s : condition1a s → gindy K (gindy R (wfp T)) s.
+  Proof.
+    intros H H1 H2; red in H.
+    specialize (H H2).
+    apply bars_wfp.
+    revert H.
+    apply bars_mono; auto.
+    intros x Hx.
+    apply gbars_gindy with (T := R).
+    revert Hx; apply gbars_mono; auto.
+  Qed.
+  
+  Theorem theorem7 :
+      (∀s, condition1a s)
+    → (∀s, bars K (gindy R (wfp T)) s)
+    → (∀s, bars R (wfp T) s)
+    → well_founded T.
+  Proof.
+    intros H1 H2 H3.
+    generalize (fun s => lemma6 _ (H1 s)); intros H4.
+    
+    Check gindy_full.
+  
+  
   
 End termination.
 
