@@ -23,6 +23,10 @@ Notation "'⟨' x '|' l '⟩ₜ'" := (node x l) (at level 0, l at level 200, for
 #[local] Hint Constructors clos_trans : core.
 #[local] Hint Resolve Acc_inv Acc_intro 
                       in_cons in_eq in_elt in_or_app : core.
+
+Notation "R ⋆" := (clos_refl_trans R) (at level 1, left associativity, format "R ⋆").
+Notation "R ⋄ T" := (λ x z, ∃y, R x y ∧ T y z) (at level 2, right associativity, format "R ⋄ T").
+
 Section list_order.
 
   Variables (X : Type) (R : X → X → Prop).
@@ -224,8 +228,8 @@ End cover_morphism.
 
 Notation wfp := Acc.
 
-Fact wfp_clos_rt X T x y : @clos_refl_trans X T x y → wfp T y → wfp T x.
-Proof. induction 1; eauto. Qed.  
+Fact wfp_clos_rt X T (x y : X) : T⋆ x y → wfp T y → wfp T x.
+Proof. induction 1; eauto. Qed.
 
 Section bars.
 
@@ -290,12 +294,29 @@ Section bars.
   
   Fact bars_wfp T x : bars T (wfp T) x ↔ wfp T x.
   Proof. apply gindy_full; constructor; auto. Qed.
-  
+
+  Fact gbars__bars_gbars R T Q P x: (∀y, T y x → gbars R Q P y) → bars T (gbars R Q P) x.
+  Proof. constructor 2; constructor 1; eauto. Qed.
+
+  Hint Constructors clos_refl_trans : core.
+
+  Fact wfp__crt__gbars_disj R Q P y :
+      wfp R y
+    → (∀x, R⋆ x y → P x ∨ Q x)
+    → gbars R Q P y.
+  Proof.
+    induction 1 as [ y _ IH ]; intros Hy.
+    destruct (Hy y) as [ | ]; auto.
+    constructor 2; eauto.
+  Qed.
+
 End bars.
 
 Arguments gbars {_}.
 Arguments bars {_}.
 Arguments gindy {_}.
+
+(* ⋄ ⋆ *)
 
 Section bars_morphism.
 
@@ -353,8 +374,6 @@ Proof.
   + constructor 2; auto.
 Admitted.
 
-
-
 Section termination.
 
   Variables (X : Type) (R T K : X → X → Prop).
@@ -366,49 +385,52 @@ Section termination.
     Variables (s : X).
 
     Definition condition1a := (∀r, R r s → wfp T r) → bars T (gbars R (λ r, K r s) (wfp T)) s.
-    Definition condition1b := ∀t, T t s → (∀r, R r s → wfp T r) → gbars R (λ r, K r s)  (wfp T) t.
-    Definition condition1c := ∀t, T t s → gbars R (λ r, K r s) (λ v, ∃r, T v r ∧ R r s) t.
-    Definition condition1d := (∀r, wfp R r) ∧ ∀t, T t s → (∀r, R r s → wfp T r) → ∀r, clos_refl_trans R r t → wfp T r ∨ K r s.
-    Definition condition1e := (∀r, wfp R r) ∧ ∀ r t, T t s → clos_refl_trans R r t → (∃v, clos_refl_trans T r v ∧ R v s) ∨ K r s.
+    Definition condition1b := (∀r, R r s → wfp T r) → ∀t, T t s → gbars R (λ r, K r s) (wfp T) t.
+    Definition condition1c := ∀t, T t s → gbars R (λ r, K r s) (λ v, T⋄R v s) t.
+    Definition condition1c' := ∀t, T t s → gbars R (λ r, K r s) (λ v, T⋆⋄R v s) t.
+    Definition condition1d := (∀r, wfp R r) ∧ ((∀r, R r s → wfp T r) → ∀t, T t s → ∀r, R⋆ r t → wfp T r ∨ K r s).
+    Definition condition1e := (∀r, wfp R r) ∧ ∀ r t, T t s → R⋆ r t → (T⋆⋄R r s) ∨ K r s.
     
     (** Two chains (e) → (d) → (b) → (a)
-                         (c) → (b) *)
+                  (c) → (c') → (b) *)
     
     Fact condition1_b_a : condition1b → condition1a.
-    Proof. intros H ?; constructor 2; constructor 1; now apply H. Qed.
+    Proof. intros H H1; now apply gbars__bars_gbars, H. Qed.
 
-    Hint Constructors clos_refl_trans : core.
-
-    Hint Constructors gbars : core.
+    Hint Constructors clos_refl_trans gbars : core.
 
     Fact condition1_d_b : condition1d → condition1b.
-    Proof.
-      intros (H1 & H2) t Ht H.
-      specialize (H2 _ Ht H).
-      clear Ht H.
-      induction t as [ t IH ] using (well_founded_induction H1).
-      destruct (H2 t); eauto.
-      constructor 2; eauto.
-    Qed.
+    Proof. intros [] ? ? ?; apply wfp__crt__gbars_disj; eauto. Qed.
 
     Hint Resolve wfp_clos_rt : core.
    
     Fact condition1_e_d : condition1e → condition1d.
     Proof.
       intros (H1 & H2); split; auto.
-      intros t Ht Hs r Hr.
+      intros Hs t Ht r Hr.
       destruct (H2 _ _ Ht Hr) as [ (? & []) | ]; eauto.
     Qed.
 
-    Fact condition1_c_b : condition1c → condition1b.
+    Hint Resolve wfp_clos_rt : core.
+
+    Fact condition1_c'_b : condition1c' → condition1b.
     Proof.
-      intros H t Ht Hs; red in H.
+      intros H Hs t Ht; red in H.
       generalize (H _ Ht); clear Ht.
-      induction 1 as [ ? (? & []) | ]; eauto.
+      apply gbars_mono; auto.
+      intros ? (? & ? & ?%Hs); eauto.
+    Qed.
+
+    Fact condition1_c_b' : condition1c → condition1c'.
+    Proof.
+      intros H t Ht.
+      generalize (H _ Ht); clear Ht.
+      apply gbars_mono; auto.
+      intros ? (? & []); eauto.
     Qed.
 
   End conditions.
-  
+
   Lemma lemma6 s : condition1a s → gindy K (gindy R (wfp T)) s.
   Proof.
     intros H H1 H2; red in H.
@@ -420,7 +442,7 @@ Section termination.
     apply gbars_gindy with (T := R).
     revert Hx; apply gbars_mono; auto.
   Qed.
-  
+
   Theorem theorem7 :
       (∀s, condition1a s)
     → (∀s, bars K (gindy R (wfp T)) s)
@@ -428,16 +450,98 @@ Section termination.
     → well_founded T.
   Proof.
     intros H1 H2 H3.
-    generalize (gindy_full _ _ _ (fun s => lemma6 _ (H1 s))); intros H4.
-    assert (forall s, gindy R (wfp T) s) as H5.
+    generalize (gindy_full _ _ _ (λ s, lemma6 _ (H1 s))); intros H4.
+    assert (∀s, gindy R (wfp T) s) as H5.
     1: intros s; apply H4, H2.
     generalize (gindy_full _ _ _ H5); intros H6.
     intro; apply H6, H3.
   Qed.
- 
+
 End termination.
 
+Section goubault.
 
+  Variables (X : Type) (R T K : X → X → Prop).
+
+(*
+  Lemma lemma8 P s t :
+       wfp R t
+    → (T t s → P t ∨ (K t s ∧ ∀u, R u t → T u s ∨ P u))
+    → (T t s → gbars R (λ r, K r s) P t).
+  Proof.
+    induction 1 as [ t _ IHt ].
+    intros H1 Ht.
+    destruct (H1 Ht) as [ H3 | (H3 & H4) ]; auto.
+    constructor 2; auto.
+    intros u Hu.
+    destruct (H4 _ Hu); eauto.
+  Qed.
+*)
+
+  Lemma lemma8 P s :
+      (∀t, T t s → P t ∨ (K t s ∧ ∀u, R u t → T u s ∨ P u))
+    → (∀r, wfp R r)
+    → (∀t, T t s → gbars R (λ r, K r s) P t).
+  Proof.
+    intros H1 H2 t Ht.
+    induction t as [ t IHt ] using (well_founded_induction H2).
+    destruct (H1 _ Ht) as [ H3 | (H3 & H4) ]; auto.
+    constructor 2; auto.
+    intros u Hu.
+    destruct (H4 _ Hu); eauto.
+  Qed.
+
+  Hint Resolve wfp_clos_rt : core.
+
+  Lemma lemma9 s :
+      (∀t, T t s → (T⋆⋄R t s) 
+                 ∨ (K t s ∧ ∀u, R u t → T u s))
+    → (∀r, wfp R r)
+    → condition1b _ R T K s.
+  Proof.
+    intros H1 H2 H3.
+    apply lemma8; auto.
+    intros t Ht.
+    destruct (H1 _ Ht) as [ (? & ? & ?%H3) | [] ]; eauto.
+  Qed.
+
+  Section thm1.
+
+    Definition ovb (P : X → Prop) s := ∀u, R u s → P u.
+
+    Notation SN := (wfp T).
+
+    Let SNb s := ovb SN s → SN s.
+
+    Hypothesis H1 : ∀ t s, T t s → T⋆ ⋄ R t s ∨ K t s ∧ ∀u, R u t → T u s.
+    Hypothesis H3 : well_founded R.
+    Hypothesis H4 : ∀s, ovb SN s → bars K SNb s.
+
+    Hypothesis xm : ∀P, P ∨ ¬ P.
+
+    Local Fact H5 : ∀s, bars K SNb s.
+    Proof.
+      intros s.
+      destruct (xm (ovb SN s)); auto.
+      constructor 1; now red.
+    Qed.
+
+    (* Carefull than the prof require XM here *)
+
+    Theorem theorem1 s : SN s.
+    Proof.
+      revert s.
+      apply theorem7 with (R := R) (K := K).
+      + intro; apply condition1_b_a, lemma9; auto.
+      + intro; apply H5.
+      + intros s; generalize (H3 s).
+        rewrite <- bars_iff_wfp.
+        now apply bars_mono.
+    Qed.
+
+  End thm1.
+
+End goubault.
 
 Section ctxt.
 
