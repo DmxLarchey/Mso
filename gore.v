@@ -791,9 +791,6 @@ Section ctxt.
   Let T := ctxt sigma.
   Let SN1 := ctxt1 (λ t s, T t s ∧ wfp T s).
   Let K := K' ∪₂ SN1. 
-  
-  Definition Condition2a := ∀ t s, sigma t s → (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰ u t → wfp T u ∨ K u s.
-  Definition Condition2b := ∀ t s, sigma t s → ∀u, R ⃰ u t → (T ∪₂ R) ⃰⋄R u s ∨ K' u s.
 
   Fact T_comp_R : T⋄R ⊆₂ R⋄T.
   Proof.
@@ -802,6 +799,9 @@ Section ctxt.
     + red; simpl; eauto.
     + now constructor 2.
   Qed.
+ 
+  Definition Condition2a := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
+  Definition Condition2b := R ⃰⋄sigma ⊆₂ (T ∪₂ R) ⃰⋄R ∪₂ K'.
 
   Hint Constructors clos_refl_trans : core.
 
@@ -810,8 +810,8 @@ Section ctxt.
 
   Fact Condition_2b_2a : Condition2b → Condition2a.
   Proof.
-    intros H2b t s H1 H2 u Hu; unfold K.
-    destruct (H2b _ _ H1 _ Hu) as [ (w & H3 & H4) | ]; auto.
+    intros H2b s Hs u Hu; unfold K.
+    destruct (H2b _ _ Hu) as [ (w & H3 & H4) | ]; auto.
     apply T_cup_R_star in H3 as (z & H3 & H5).
     destruct (@crt_xchg_l _ R T) with (x := z) (y := s)
      as (a & H6 & H7); eauto.
