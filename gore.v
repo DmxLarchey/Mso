@@ -445,7 +445,7 @@ Section termination.
 
   Theorem theorem7 :
       (∀s, condition1a s)
-    → (∀s, bars K (gindy R (wfp T)) s)
+    → (∀s, (* (∀r, R r s → wfp T r) → *) bars K (gindy R (wfp T)) s)
     → (∀s, bars R (wfp T) s)
     → well_founded T.
   Proof.
@@ -463,21 +463,6 @@ Section goubault.
 
   Variables (X : Type) (R T K : X → X → Prop).
 
-(*
-  Lemma lemma8 P s t :
-       wfp R t
-    → (T t s → P t ∨ (K t s ∧ ∀u, R u t → T u s ∨ P u))
-    → (T t s → gbars R (λ r, K r s) P t).
-  Proof.
-    induction 1 as [ t _ IHt ].
-    intros H1 Ht.
-    destruct (H1 Ht) as [ H3 | (H3 & H4) ]; auto.
-    constructor 2; auto.
-    intros u Hu.
-    destruct (H4 _ Hu); eauto.
-  Qed.
-*)
-
   Lemma lemma8 P s :
       (∀t, T t s → P t ∨ (K t s ∧ ∀u, R u t → T u s ∨ P u))
     → (∀r, wfp R r)
@@ -494,8 +479,7 @@ Section goubault.
   Hint Resolve wfp_clos_rt : core.
 
   Lemma lemma9 s :
-      (∀t, T t s → (T⋆⋄R t s) 
-                 ∨ (K t s ∧ ∀u, R u t → T u s))
+      (∀t, T t s → (T⋆⋄R t s) ∨ (K t s ∧ ∀u, R u t → T u s))
     → (∀r, wfp R r)
     → condition1b _ R T K s.
   Proof.
@@ -509,26 +493,43 @@ Section goubault.
 
     Definition ovb (P : X → Prop) s := ∀u, R u s → P u.
 
-    Notation SN := (wfp T).
+(*    Notation SN := (wfp T).
 
     Let SNb s := ovb SN s → SN s.
 
-    Hypothesis H1 : ∀ t s, T t s → T⋆ ⋄ R t s ∨ K t s ∧ ∀u, R u t → T u s.
+    Goal forall s, SNb s = gindy R SN s.
+    Proof. reflexivity. Qed. *)
+
+    Hypothesis H1 : ∀ t s, T t s → T⋆⋄R t s ∨ K t s ∧ ∀u, R u t → T u s.
     Hypothesis H3 : well_founded R.
-    Hypothesis H4 : ∀s, ovb SN s → bars K SNb s.
+    Hypothesis H4 : ∀s, (∀r, R r s → wfp T r) → bars K (gindy R (wfp T)) s.
+
+    Theorem goubault s : wfp T s.
+    Proof.
+      induction s as [ s IHs ] using (well_founded_induction H3).
+      cut (gindy R (wfp T) s).
+      1: now intros H; apply H.
+      apply H4 in IHs; clear H4.
+      revert s IHs; apply gindy_full; intros s IH Hs.
+      constructor; intros t.
+      induction t as [ t IHt ] using (well_founded_induction H3).
+      intros [ (u & G1 & G2) | (G1 & G2) ]%H1.
+      + generalize (Hs _ G2); eauto.
+      + apply IH; auto; red; auto.
+    Qed.
 
     Hypothesis xm : ∀P, P ∨ ¬ P.
 
-    Local Fact H5 : ∀s, bars K SNb s.
+    Local Fact H5 : ∀s, bars K (gindy R (wfp T)) s.
     Proof.
       intros s.
-      destruct (xm (ovb SN s)); auto.
+      destruct (xm (∀r, R r s → wfp T r)); auto.
       constructor 1; now red.
     Qed.
 
     (* Carefull than the prof require XM here *)
 
-    Theorem theorem1 s : SN s.
+    Theorem goubault' s : wfp T s.
     Proof.
       revert s.
       apply theorem7 with (R := R) (K := K).
