@@ -298,6 +298,15 @@ Section bars.
   Fact gbars__bars_gbars R T Q P x: (∀y, T y x → gbars R Q P y) → bars T (gbars R Q P) x.
   Proof. constructor 2; constructor 1; eauto. Qed.
 
+  Fact bars_inv T P x : bars T P x → (P x → ∀y, T y x → P y) → ∀y, T y x → bars T P y.
+  Proof. intros []; auto. Qed.
+
+  Fact gbars_inv T Q P x : gbars T Q P x → (P x → ∀y, T y x → P y) → ∀y, T y x → gbars T Q P y.
+  Proof. intros []; auto. Qed.
+
+  Fact wfp_inv T x : (wfp T x → ∀y, T y x → wfp T y).
+  Proof. now intros []. Qed.
+
   Hint Constructors clos_refl_trans : core.
 
   Fact wfp__crt__gbars_disj R Q P y :
@@ -501,22 +510,86 @@ Section goubault.
     Proof. reflexivity. Qed. *)
 
     Hypothesis H1 : ∀ t s, T t s → T⋆⋄R t s ∨ K t s ∧ ∀u, R u t → T u s.
-    Hypothesis H3 : well_founded R.
     Hypothesis H4 : ∀s, (∀r, R r s → wfp T r) → bars K (gindy R (wfp T)) s.
 
-    Theorem goubault s : wfp T s.
-    Proof.
-      induction s as [ s IHs ] using (well_founded_induction H3).
-      cut (gindy R (wfp T) s).
-      1: now intros H; apply H.
-      apply H4 in IHs; clear H4.
-      revert s IHs; apply gindy_full; intros s IH Hs.
-      constructor; intros t.
-      induction t as [ t IHt ] using (well_founded_induction H3).
-      intros [ (u & G1 & G2) | (G1 & G2) ]%H1.
-      + generalize (Hs _ G2); eauto.
-      + apply IH; auto; red; auto.
-    Qed.
+    Section goubault_orig.
+
+      Hypothesis H3 : well_founded R.
+
+      Theorem goubault s : wfp T s.
+      Proof.
+        induction s as [ s IHs ] using (well_founded_induction H3).
+        cut (gindy R (wfp T) s).
+        1: now intros H; apply H.
+        apply H4 in IHs; clear H4.
+        revert s IHs; apply gindy_full; intros s IH Hs.
+        constructor; intros t.
+        induction t as [ t IHt ] using (well_founded_induction H3).
+        intros [ (u & G1 & G2) | (G1 & G2) ]%H1.
+        + generalize (Hs _ G2); eauto.
+        + apply IH; auto; red; auto.
+      Qed.
+
+    End goubault_orig.
+
+    Section goubault_bar.
+
+      Hypothesis H3 : ∀s, bars R (wfp T) s.
+
+      Theorem goubault_bar s : wfp T s.
+      Proof.
+        generalize (H3 s).
+        induction 1 as [ | s _ IHs ]; auto.
+        cut (gindy R (wfp T) s).
+        1: now intros H; apply H.
+        apply H4 in IHs; clear H4.
+        revert s IHs; apply gindy_full; intros s IH Hs.
+        constructor; intros t.
+        generalize (H3 t).
+        induction 1 as [ | t _ IHt ]; auto.
+        intros [ (u & G1 & G2) | (G1 & G2) ]%H1.
+        + generalize (Hs _ G2); eauto.
+        + apply IH; auto; red; auto.
+      Qed.
+
+    End goubault_bar.
+
+    Section goubault_1a.
+
+      Hypothesis H1' : ∀s, condition1a _ R T K s.
+      Hypothesis H3 : ∀s, bars R (wfp T) s.
+
+(*
+      Theorem goubault_1a s : wfp T s.
+      Proof.
+        clear H1.
+        generalize (H3 s).
+        induction 1 as [ | s _ IHs ]; auto.
+        cut (gindy R (wfp T) s).
+        1: now intros H; apply H.
+        apply H4 in IHs; clear H4.
+        revert s IHs; apply gindy_full; intros s IH Hs.
+        constructor; intros t.
+        generalize (H3 t).
+        induction 1 as [ | t _ IHt ]; auto.
+        intros Ht.
+        assert (Ht' : ∀y, R y t → wfp T y).
+        1:{ intros r Hr.
+ 
+        Check (H1' _ Hs).
+        Search bars gbars.
+        Check gbars_inv _ R (λ r : X, K r s) (wfp T) s.
+ (gbars_inv _ _ _ _ _ (wfp_inv _ _)).
+        intros ?%bars_inv.
+        intros [ (u & G1 & G2) | (G1 & G2) ]%H1'.
+        + generalize (Hs _ G2); eauto.
+        + apply IH; auto; red; auto.
+ *)
+
+  End goubault_1a.
+
+
+  Hypothesis H3 : well_founded R.
 
     Hypothesis xm : ∀P, P ∨ ¬ P.
 
