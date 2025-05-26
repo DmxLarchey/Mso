@@ -24,7 +24,8 @@ Notation "'⟨' x '|' l '⟩ₜ'" := (node x l) (at level 0, l at level 200, for
 #[local] Hint Resolve Acc_inv Acc_intro 
                       in_cons in_eq in_elt in_or_app : core.
 
-Notation "R ⃰" := (clos_refl_trans R) (at level 1, left associativity, format "R  ⃰").
+Notation "R ⃰" := (clos_refl_trans R) (at level 1, left associativity, format "R ⃰").
+Notation "R ⁺" := (clos_trans R) (at level 1, left associativity, format "R ⁺").
 Notation "R ⋄ T" := (λ x z, ∃y, R x y ∧ T y z) (at level 2, right associativity, format "R ⋄ T").
 
 #[global] Notation "P '⊆₁' Q" := (∀x, P x → Q x) (at level 70, no associativity, format "P  ⊆₁  Q").
@@ -573,6 +574,159 @@ Section goubault.
 
 End goubault.
 
+Section iter.
+
+  Variables (X : Type) (f : X → X).
+
+  Fixpoint iter x n :=
+    match n with
+    | 0   => x
+    | S n => iter (f x) n
+    end.
+
+  Fact iter_add x n m : iter x (n+m) = iter (iter x n) m.
+  Proof. induction n in x |- *; simpl; auto. Qed.
+
+  Fact iter_S x n : iter x (S n) = f (iter x n).
+  Proof.
+    replace (S n) with (n+1) by lia.
+    now rewrite iter_add.
+  Qed.
+
+End iter.
+
+Arguments iter {_}.
+
+Section power.
+
+  Variables (X : Type).
+
+  Implicit Types (R T : X → X → Prop).
+
+  Definition power R := iter (fun X => R⋄X) eq.
+
+  Fact power_comp R T n u v : (power R n)⋄T u v ↔ iter (fun X => R⋄X) T n u v.
+  Proof.
+    unfold power.
+    revert R T u v; induction n as [ | n IHn ]; intros R T u v.
+    + simpl; split; eauto; now intros (? & [] & ?).
+    + rewrite !iter_S; split.
+      * intros (y & (z & H1 & H2) & H3).
+        exists z; split; auto; apply IHn; eauto.
+      * intros (y & H1 & (z & H2 & H3)%IHn); eauto.
+  Qed.
+
+  Fact power_add R n m u v : power R (n+m) u v ↔ (power R m)⋄(power R n) u v.
+  Proof. rewrite power_comp; unfold power; now rewrite iter_add. Qed.
+
+  Fact power_zero R : power R 0 = eq.
+  Proof. reflexivity. Qed.
+
+  Fact power_one R u v : power R 1 u v ↔ R u v.
+  Proof.
+    split.
+    + cbn; now intros (? & ? & <-).
+    + now exists v.
+  Qed.
+
+  Fact power_S_r R n u v : power R (S n) u v ↔ (power R n)⋄R u v.
+  Proof.
+    change (S n) with (1+n).
+    rewrite power_add.
+    split; intros (y & H1 & H2).
+    + rewrite power_one in H2; eauto.
+    + rewrite <- power_one in H2; eauto.
+  Qed.
+
+  Fact power_S_l R n u v : power R (S n) u v ↔ R⋄(power R n) u v.
+  Proof.
+    replace (S n) with (n+1) by lia.
+    rewrite power_add.
+    split; intros (y & H1 & H2).
+    + rewrite power_one in H1; eauto.
+    + rewrite <- power_one in H1; eauto.
+  Qed.
+
+  Fact power_xchg_l R T n : T⋄R ⊆₂ R⋄T → (power T n)⋄R ⊆₂ R⋄(power T n).
+  Proof.
+    intros H.
+    induction n as [ | n IHn ].
+    + rewrite power_zero.
+      intros ? ? (? & []); subst; eauto.
+    + intros x y (z & (u & H1 & H2)%power_S_r & H3).
+      destruct (H u y) as (k & H4 & H5); eauto.
+      destruct (IHn x k) as (b & []); eauto.
+      exists b; split; auto.
+      apply power_S_r; eauto.
+  Qed.
+
+  Fact power_xchg_r R T n : T⋄R ⊆₂ R⋄T → T⋄(power R n) ⊆₂ (power R n)⋄T.
+  Proof.
+    intros H.
+    induction n as [ | n IHn ].
+    + rewrite power_zero.
+      intros ? ? (? & []); subst; eauto.
+    + intros x y (z & H1 & (u & H2 & H3)%power_S_l).
+      destruct (H x u) as (k & H4 & H5); eauto.
+      destruct (IHn k y) as (b & []); eauto.
+      exists b; split; auto.
+      apply power_S_l; eauto.
+  Qed.
+
+  Fact power_xchg R T n m : T⋄R ⊆₂ R⋄T → (power T m)⋄(power R n) ⊆₂ (power R n)⋄(power T m).
+  Proof. intro; now apply power_xchg_l, power_xchg_r. Qed.
+
+End power.
+
+Arguments power {_}.
+
+Hint Constructors clos_refl_trans : core.
+
+Fact power_iff_crt X (R : X → X → Prop) u v : R ⃰ u v ↔ ∃n, power R n u v.
+Proof.
+  split.
+  + induction 1 as [ u v H | u | u v w _ (n & H1) _ (m & H2) ].
+    * exists 1; now apply power_one.
+    * exists 0; now rewrite power_zero.
+    * exists (m+n); rewrite power_add; eauto.
+  + intros (n & Hn).
+    induction n as [ | n IHn ] in u, v, Hn |- *.
+    * rewrite power_zero in Hn; subst; auto.
+    * apply power_S_l in Hn as (w & H1 & H2%IHn); eauto.
+Qed.
+
+Fact crt_xchg_l [X] [R T : X → X → Prop] : T⋄R ⊆₂ R⋄T → T ⃰⋄R ⊆₂ R⋄T ⃰.
+Proof.
+  intros H u w (v & (n & Hn)%power_iff_crt & H1).
+  destruct power_xchg_l with (T := T) (R := R) (n := n) (x := u) (y := w)
+    as (z & []); eauto.
+  exists z; rewrite !power_iff_crt; eauto.
+Qed.
+
+Fact crt_xchg [X] [R T : X → X → Prop] : T⋄R ⊆₂ R⋄T → T ⃰⋄R ⃰ ⊆₂ R ⃰⋄T ⃰.
+Proof.
+  intros H u w (v & (n & Hn)%power_iff_crt & (m & Hm)%power_iff_crt).
+  destruct power_xchg with (T := T) (R := R) (n := m) (m := n) (x := u) (y := w)
+    as (z & []); eauto.
+  exists z; rewrite !power_iff_crt; eauto.
+Qed.
+
+Fact crt_mono X (R T : X → X → Prop) : R ⊆₂ T → R ⃰ ⊆₂ T ⃰.
+Proof. induction 2; eauto. Qed.
+
+Fact crt_xchg_cup X (R T : X → X → Prop) : T⋄R ⊆₂ R⋄T → ∀ u v, (T ∪₂ R) ⃰  u v ↔ R ⃰ ⋄T ⃰ u v.
+Proof.
+  intros G; split.
+  + induction 1 as [ u v [ H1 | H1 ] | | u v w _ (a & H1 & H2) _ (b & H3 & H4) ].
+    * exists u; eauto.
+    * exists v; eauto.
+    * exists x; eauto.
+    * destruct (crt_xchg G a b) as (? & []); eauto.
+  + intros (w & H1 & H2); constructor 3 with w. 
+    * revert H1; apply crt_mono; eauto.
+    * revert H2; apply crt_mono; eauto.
+Qed.
+
 Section ctxt.
 
   Variables (X : Type).
@@ -635,17 +789,41 @@ Section ctxt.
   Variables (sigma K' : term X → term X → Prop).
   
   Let T := ctxt sigma.
-  Let SN1 := ctxt1 (λ t s, T t s /\ wfp T s).
+  Let SN1 := ctxt1 (λ t s, T t s ∧ wfp T s).
   Let K := K' ∪₂ SN1. 
   
-  Definition Condition2a := ∀ t s, sigma t s → (∀r, clos_trans R r s → wfp T r) → ∀u, R ⃰ u t → wfp T u ∨ K u s.
-  Definition Condition2b := ∀ t s, sigma t s → ∀u, R ⃰ u t → (T ∪₂ R) ⃰ u s ∨ K' u s.
-  
+  Definition Condition2a := ∀ t s, sigma t s → (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰ u t → wfp T u ∨ K u s.
+  Definition Condition2b := ∀ t s, sigma t s → ∀u, R ⃰ u t → (T ∪₂ R) ⃰⋄R u s ∨ K' u s.
+
+  Fact T_comp_R : T⋄R ⊆₂ R⋄T.
+  Proof.
+    intros u [f m] (v & H1 & (l & r & E)%in_split); simpl in E; subst.
+    exists (node f (l++[u]++r)); split.
+    + red; simpl; eauto.
+    + now constructor 2.
+  Qed.
+
+  Hint Constructors clos_refl_trans : core.
+
+  Fact T_cup_R_star : (T ∪₂ R) ⃰ ⊆₂ R ⃰ ⋄T ⃰.
+  Proof. apply crt_xchg_cup, T_comp_R. Qed.
+
   Fact Condition_2b_2a : Condition2b → Condition2a.
   Proof.
     intros H2b t s H1 H2 u Hu; unfold K.
-    destruct (H2b _ _ H1 _ Hu); auto.
-    revert H.
+    destruct (H2b _ _ H1 _ Hu) as [ (w & H3 & H4) | ]; auto.
+    apply T_cup_R_star in H3 as (z & H3 & H5).
+    destruct (@crt_xchg_l _ R T) with (x := z) (y := s)
+     as (a & H6 & H7); eauto.
+    1: apply T_comp_R.
+    Check H2b a.
+    (* R+ u a /\ T* a s *)
+    assert (Hw : wfp T w).
+    1: apply H2; eauto.
+    assert (Hz : 
+    left; revert H3 Hw.
+    intros 
+    clear 
     induction 1 as [ u s [H|H] | | ].
     + do 2 right.
       
