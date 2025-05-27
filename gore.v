@@ -714,7 +714,7 @@ Qed.
 Fact crt_mono X (R T : X → X → Prop) : R ⊆₂ T → R ⃰ ⊆₂ T ⃰.
 Proof. induction 2; eauto. Qed.
 
-Fact crt_xchg_cup X (R T : X → X → Prop) : T⋄R ⊆₂ R⋄T → ∀ u v, (T ∪₂ R) ⃰  u v ↔ R ⃰ ⋄T ⃰ u v.
+Fact crt_xchg_cup X (R T : X → X → Prop) : T⋄R ⊆₂ R⋄T → ∀ u v, (T ∪₂ R) ⃰ u v ↔ R ⃰⋄T ⃰ u v.
 Proof.
   intros G; split.
   + induction 1 as [ u v [ H1 | H1 ] | | u v w _ (a & H1 & H2) _ (b & H3 & H4) ].
@@ -727,11 +727,112 @@ Proof.
     * revert H2; apply crt_mono; eauto.
 Qed.
 
+Section wfp_commute.
+
+  Variables (X : Type) (R T : X → X → Prop)
+            (HRT : T⋄R ⊆₂ R⋄T).
+
+  Fact wfp_commute s : wfp T s → ∀t, R t s → wfp T t.
+  Proof.
+    induction 1 as [ s _ IHs ]; intros t Ht.
+    constructor.
+    intros u Hu.
+    destruct (HRT u s) as (? & []); eauto.
+  Qed.
+
+  Hint Resolve wfp_commute : core.
+
+  Fact wfp_commute_crt s t : R ⃰ t s → wfp T s → wfp T t.
+  Proof. induction 1; eauto. Qed.
+
+End wfp_commute.
+
+Section occ_eq.
+
+  Variables (X : Type) (x : X).
+
+  Definition lsum := fold_right plus 0.
+
+  Inductive occ_eq : term X → nat → Prop :=
+    | occ_eq_stop l : occ_eq ⟨x|l⟩ₜ 1
+    | occ_eq_next f l m : x ≠ f → Forall2 occ_eq l m → occ_eq ⟨f|l⟩ₜ (lsum m).
+    
+  Hint Constructors occ_eq : core.
+    
+  Definition occ_eq_inv t n (o : occ_eq t n) :
+    match t with
+    | ⟨f|l⟩ₜ => x = f ∧ n = 1 ∨ x ≠ f ∧ ∃m, Forall2 occ_eq l m ∧ n = lsum m
+    end.
+  Proof. destruct o; simpl; eauto. Qed.
+
+  Fact occ_eq_iff f l n :
+     occ_eq ⟨f|l⟩ₜ n ↔ x = f ∧ n = 1 ∨ x ≠ f ∧ ∃m, Forall2 occ_eq l m ∧ n = lsum m.
+  Proof.
+    split.
+    + apply occ_eq_inv.
+    + intros [ (<- & ->) | (? & m & ? & ->) ]; eauto.
+  Qed.
+
+End occ_eq.
+
+Arguments occ_eq {X}.
+
+(*
+
+Section context.
+
+  Variables (X : Type).
+  
+  Definition is_ctx {I} (t : term (I+X)) := ∀i, occ_eq (inl i) t 1.
+  
+  Fixpoint context_subst {I J} (s : I → term (J+X)) t : term (J+X) :=
+    match t with
+    | ⟨inl i|l⟩ₜ => s i
+    | ⟨inr i|l⟩ₜ => ⟨inr i|map (context_subst s) l⟩ₜ
+    end.
+
+  Fact is_ctx_subst I J (s : I → term (J+X)) (t : term (I+X)) :
+      ∀ (f : I → nat), (∀i, occ_eq (inl i) t (f i))
+    → ∀ (g : I → J → nat), (∀i j, occ_eq (inl j) (s i) (g i j))
+    → ∀ j, occ_eq (inl j) (context_subst s t) (sum i (f i * g i j)).
+    is_ctx t → (∀i, is_ctx (s i)) → is_ctx (context_subst s t).
+  Proof.
+    intros H1 Hs; revert H1. 
+    induction t as [ [ i | x ] l IH ]; intros Ht; simpl; auto.
+    intros j.
+    apply occ_eq_iff; right; split; [ easy | ].
+    red in H1.
+End context.
+
+Check context_subst.
+Definition ctx I X := { t : term (I+X) | forall i, occ t i = 1 }.
+
+*)
+
 Section ctxt.
 
   Variables (X : Type).
 
   Implicit Type (T : term X → term X → Prop) (t : term X).
+  
+  Inductive ctx : Type :=
+    | ctx_hole : ctx
+    | ctx_cont : X → list (term X) → ctx → list (term X) → ctx.
+    
+  Fixpoint ctx_subst C t :=
+    match C with
+    | ctx_hole => t
+    | ctx_cont f l D r => ⟨f|l++[ctx_subst D t]++r⟩ₜ
+    end.
+    
+  Fixpoint ctx_comp C D :=
+    match C with
+    | ctx_hole => D
+    | ctx_cont f l C r => ctx_cont f l (ctx_comp C D) r
+    end.
+    
+  Fact ctx_comp_subst C D t : ctx_subst (ctx_comp C D) t = ctx_subst C (ctx_subst D t).
+  Proof. induction C; simpl; do 3 f_equal; auto. Qed.
 
   Inductive ctxt1 T : term X → term X → Prop :=
     | ctxt1_intro f l r p q : T p q → ctxt1 T ⟨f|l++[p]++r⟩ₜ ⟨f|l++[q]++r⟩ₜ.
@@ -754,10 +855,20 @@ Section ctxt.
     right; do 5 eexists; eauto.
   Qed.
   
-  Definition pctxt T := ctxt (ctxt1 T).
-
   Hint Constructors ctxt1 ctxt : core.
   
+  Fact ctxt_iff T p q : ctxt T p q ↔ ∃c r s, p = ctx_subst c r ∧ q = ctx_subst c s ∧ T r s.
+  Proof.
+    split.
+    + induction 1 as [ p q H | f l r p q H (c & a & b & -> & -> & ?) ].
+      * exists ctx_hole, p, q; now simpl.
+      * exists (ctx_cont f l c r), a, b; simpl; auto.
+    + intros (c & a & b & -> & -> & H).
+      induction c as [ | f l c IH r ]; simpl; auto; now constructor 2.
+  Qed.  
+
+  Definition pctxt T := ctxt (ctxt1 T).
+
   Fact ctxt1__ctxt T : ctxt1 T ⊆₂ ctxt T.
   Proof. induction 1; eauto. Qed.
   
@@ -790,8 +901,7 @@ Section ctxt.
   
   Let T := ctxt sigma.
   Let SN1 := ctxt1 (λ t s, T t s ∧ wfp T s).
-  Let K := K' ∪₂ SN1. 
-
+  
   Fact T_comp_R : T⋄R ⊆₂ R⋄T.
   Proof.
     intros u [f m] (v & H1 & (l & r & E)%in_split); simpl in E; subst.
@@ -799,52 +909,140 @@ Section ctxt.
     + red; simpl; eauto.
     + now constructor 2.
   Qed.
-
-  Fact Rop_comp_T : R⁻¹⋄T ⊆₂ T⋄R⁻¹.
+  
+  Hint Resolve Rwf T_comp_R : core.
+  
+  Fact wfp_T_R_Rplus s : (∀r, R r s → wfp T r) ↔ (∀r, R⁺ r s → wfp T r).
   Proof.
-    intros [f m] v (u & (l & r & E)%in_split & H2); simpl in E; subst.
-    exists (node f (l++[v]++r)); split.
-    + now constructor 2.
-    + red; simpl; eauto.
+    split.
+    + intros H r; rewrite clos_trans_inv_right.
+      intros (u & H1 & H2%H).
+      revert H1 H2; apply wfp_commute_crt; auto.
+    + intros H r Hr; apply H; auto.
   Qed.
- 
+
+  Definition Condition2a K := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
+  
+  Fact ctx_in_inv C u a :
+      R u (ctx_subst C a)
+    →  C = ctx_hole ∧ R u a
+    ∨ (∃ f l D r, C = ctx_cont f l D r ∧ u = ctx_subst D a)
+    ∨ (∃ f l m D r, C = ctx_cont f (l++[u]++m) D r)
+    ∨ (∃ f l D m r, C = ctx_cont f l D (m++[u]++r)).
+  Proof.
+    destruct C as [ | f l D r ]; simpl; auto.
+    unfold R; simpl.
+    intros [ (l' & m & ->)%in_split | [ | (m & r' & ->)%in_split ] ]%in_app_iff; right.
+    + right; left; exists f, l', m; eauto. 
+    + left; exists f, l, D, r; auto.
+    + right; right; exists f, l, D, m, r'; auto.
+  Qed.
+
+  Fact Rstar_ctx u a : R ⃰ u a → ∃C, a = ctx_subst C u.
+  Proof.
+    induction 1 as [ u [f m] H | u | u v a _ (D & ?) _ (C & ?) ].
+    + apply in_split in H; simpl in H.
+      destruct H as (l & r & ->).
+      exists (ctx_cont f l ctx_hole r); auto.
+    + exists ctx_hole; auto.
+    + exists (ctx_comp C D); rewrite ctx_comp_subst; now subst.
+  Qed.
+
+  Fact ctx_Rstar_inv C u a :
+      R ⃰ u (ctx_subst C a)
+    → u = ctx_subst C a
+    \/ (C = ctx_hole /\ ∃D, a = ctx_subst D u)
+    \/ (∃ f l D r, C = ctx_cont f l D r ∧ u = ctx_subst D a)
+    \/ (∃ f l E m D r, C = ctx_cont f (l++[ctx_subst E u]++m) D r)
+    \/ (∃ f l D m E r, C = ctx_cont f l D (m++[ctx_subst E u]++r)).
+  Proof.
+    rewrite clos_refl_trans__clos_trans, clos_trans_inv_right.
+    intros [ H | (v & Hv & Ha) ]; eauto; right.
+    apply ctx_in_inv in Ha
+      as [ (-> & Ha) 
+       | [ (f & l & D & r & H1 & H2)
+       | [ (f & l & m & D & r & H1)
+       |   (f & l & D & m & r & H1) 
+       ] ] ].
+    + left; split; auto.
+      apply Rstar_ctx; eauto.
+    + right; left.
+      exists f, l, D, r; split; auto.
+      apply  Rstar_ctx in Hv as (E & HE).
+      admit.
+    + do 2 right; left.
+      apply Rstar_ctx in Hv as (E & ->).
+      exists f, l, E, m, D, r; auto.
+    + do 3 right.
+      apply Rstar_ctx in Hv as (E & ->).
+      exists f, l, D, m, E, r; auto.
+  Admitted.
+
+  Theorem theorem11 K : Condition2a K → SN1 ⊆₂ K → well_founded K → ∀s, wfp T s.
+  Proof.
+    intros H1 H2 H3.
+    apply theorem7 with (R := R) (K := K).
+    + intros s; apply condition1_b_a, condition1_d_b; split; auto.
+      rewrite wfp_T_R_Rplus; intros Hs.
+      specialize (H1 _ Hs).
+      intros t (C & a & b & -> & -> & Hab)%ctxt_iff u Hu.
+      
+      induction 1 as [ t s Ht | f l r t s Hts IH ]; eauto; intros u Hu.
+      rewrite clos_refl_trans__clos_trans in Hu.
+      destruct Hu as [ -> | Hu ].
+      * right; apply H2; constructor; split; auto.
+        apply Hs; constructor 1; red; simpl; auto.
+      * apply clos_trans_inv_right in Hu as (v & Hv & Hu).
+        apply in_app_iff in Hu as [ Hu | [ <- | Hu ] ].
+        - left; apply (Hs u), clos_rt_t with v; auto.
+          constructor; red; simpl; auto.
+        - apply IH in Hv; eauto.
+          ++ admit.
+          ++ admit.
+          ++ intros w Hw; apply Hs.
+             constructor 2 with s; auto.
+             constructor 1; red; simpl; eauto.
+        - simpl in Hu. 
+          left; apply (Hs u), clos_rt_t with v; auto.
+          constructor; red; simpl; auto.
+    + intros s; generalize (H3 s).
+      rewrite <- bars_iff_wfp; now apply bars_mono.
+    + intros s; generalize (Rwf s).
+      rewrite <- bars_iff_wfp; now apply bars_mono.
+  Admitted.
+  
+  Let K := K' ∪₂ SN1. 
+
+
+
   Definition Condition2a := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
+  Definition Condition2a' := ∀s, (∀r, R r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
   Definition Condition2b := R ⃰⋄sigma ⊆₂ (T∪₂R) ⃰⋄R ∪₂ K'.
 
   Hint Constructors clos_refl_trans : core.
 
   Fact T_cup_R_star : (T ∪₂ R) ⃰ ⊆₂ R ⃰ ⋄T ⃰.
   Proof. apply crt_xchg_cup, T_comp_R. Qed.
-
-  Fact Condition_2b_2a : Condition2b → Condition2a.
+  
+  Fact Condition_2b_2a : Condition2b → Condition2a'.
   Proof.
     intros H2b s Hs u Hu; unfold K.
-    destruct Hu as (t & (n & Hn)%power_iff_crt & Ht).
-    destruct n as [ | [ | n ] ].
-    + rewrite power_zero in Hn; subst u.
-      destruct (H2b t s); eauto.
-      do 2 right; red.
     destruct (H2b _ _ Hu) as [ (w & H3 & H4) | ]; auto.
+    left.
     apply T_cup_R_star in H3 as (z & H3 & H5).
     assert (Hw : wfp T w).
     1: apply Hs; eauto.
     assert (Hz : wfp T z).
     1: revert H5 Hw; apply wfp_clos_rt.
-    unfold SN1.
-    destruct (@crt_xchg_l _ R T) with (x := z) (y := s)
-     as (a & H6 & H7); eauto.
-    1: apply T_comp_R.
-    Check H2b a.
-    (* R+ u a /\ T* a s *)
-    assert (Hw : wfp T w).
-    1: apply H2; eauto.
-    assert (Hz : 
-    left; revert H3 Hw.
-    intros 
-    clear 
-    induction 1 as [ u s [H|H] | | ].
-    + do 2 right.
-      
+    revert H3 Hz; apply wfp_commute_crt; auto.
+  Qed.
+  
+  Fact Condition_2a'_2a : Condition2a' → Condition2a.
+  Proof.
+    intros H2a' s Hs; apply H2a'.
+    intros r Hr; apply Hs; auto.
+  Qed.
+    
   
   Let SN := @Acc (term X).
   Let fwf R r t := R r t /\ SN R t. 
