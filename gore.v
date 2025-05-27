@@ -799,9 +799,17 @@ Section ctxt.
     + red; simpl; eauto.
     + now constructor 2.
   Qed.
+
+  Fact Rop_comp_T : R⁻¹⋄T ⊆₂ T⋄R⁻¹.
+  Proof.
+    intros [f m] v (u & (l & r & E)%in_split & H2); simpl in E; subst.
+    exists (node f (l++[v]++r)); split.
+    + now constructor 2.
+    + red; simpl; eauto.
+  Qed.
  
   Definition Condition2a := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
-  Definition Condition2b := R ⃰⋄sigma ⊆₂ (T ∪₂ R) ⃰⋄R ∪₂ K'.
+  Definition Condition2b := R ⃰⋄sigma ⊆₂ (T∪₂R) ⃰⋄R ∪₂ K'.
 
   Hint Constructors clos_refl_trans : core.
 
@@ -811,8 +819,18 @@ Section ctxt.
   Fact Condition_2b_2a : Condition2b → Condition2a.
   Proof.
     intros H2b s Hs u Hu; unfold K.
+    destruct Hu as (t & (n & Hn)%power_iff_crt & Ht).
+    destruct n as [ | [ | n ] ].
+    + rewrite power_zero in Hn; subst u.
+      destruct (H2b t s); eauto.
+      do 2 right; red.
     destruct (H2b _ _ Hu) as [ (w & H3 & H4) | ]; auto.
     apply T_cup_R_star in H3 as (z & H3 & H5).
+    assert (Hw : wfp T w).
+    1: apply Hs; eauto.
+    assert (Hz : wfp T z).
+    1: revert H5 Hw; apply wfp_clos_rt.
+    unfold SN1.
     destruct (@crt_xchg_l _ R T) with (x := z) (y := s)
      as (a & H6 & H7); eauto.
     1: apply T_comp_R.
