@@ -842,6 +842,11 @@ Section ctxt.
     → ∃ f l r u v, p = ⟨f|l++[u]++r⟩ₜ ∧ q = ⟨f|l++[v]++r⟩ₜ ∧ T u v.
   Proof. destruct 1; do 5 eexists; eauto. Qed.
 
+  Inductive ctx_pair (a b : term X) : term X → term X → Prop :=
+    | ctx_pair_stop : ctx_pair a b a b
+    | ctx_pair_comp f l r p q : ctx_pair a b p q → ctx_pair a b ⟨f|l++[p]++r⟩ₜ ⟨f|l++[q]++r⟩ₜ
+    .
+
   Inductive ctxt T : term X → term X → Prop :=
     | ctxt_stop p q : T p q → ctxt T p q
     | ctxt_comp f l r p q : ctxt T p q → ctxt T ⟨f|l++[p]++r⟩ₜ ⟨f|l++[q]++r⟩ₜ
@@ -855,7 +860,7 @@ Section ctxt.
     right; do 5 eexists; eauto.
   Qed.
   
-  Hint Constructors ctxt1 ctxt : core.
+  Hint Constructors ctxt1 ctxt ctx_pair : core.
   
   Fact ctxt_iff T p q : ctxt T p q ↔ ∃c r s, p = ctx_subst c r ∧ q = ctx_subst c s ∧ T r s.
   Proof.
@@ -865,7 +870,17 @@ Section ctxt.
       * exists (ctx_cont f l c r), a, b; simpl; auto.
     + intros (c & a & b & -> & -> & H).
       induction c as [ | f l c IH r ]; simpl; auto; now constructor 2.
-  Qed.  
+  Qed.
+
+  Fact ctxt_iff_ctx_pair T p q : ctxt T p q ↔ ∃ a b, T a b ∧ ctx_pair a b p q.
+  Proof.
+    split.
+    + induction 1 as [ p q H | f l r p q H (a & b & ? & ?) ].
+      * exists p, q; auto.
+      * exists a, b; eauto.
+    + intros (a & b & H1 & H); revert H.
+      induction 1; eauto.
+  Qed.
 
   Definition pctxt T := ctxt (ctxt1 T).
 
@@ -978,6 +993,30 @@ Section ctxt.
       exists f, l, D, m, E, r; auto.
   Admitted.
 
+  Fact Rstar_ctx_pair_inv s a b p q :
+      R ⃰ s p
+    → ctx_pair a b p q 
+    → R ⃰ s a ∨ R⁺ s q
+    ∨ ∃t, ctx_pair a b s t ∧ ctx_pair s t p q.
+  Proof.
+    intros H1 H2; revert H2 H1.
+    induction 1 as [ | f l r p q H IH ]; auto.
+    + rewrite clos_refl_trans__clos_trans,
+              clos_trans_inv_right.
+      intros [ -> | (k & H1 & H2) ].
+      * do 2 right; exists ⟨f|l ++ [q] ++ r⟩ₜ; auto.
+      * red in H2; simpl in H2.
+        apply in_app_iff in H2 as [ H2 | [ <- | H2 ] ].
+        - right; left; apply clos_rt_t with k; auto.
+          constructor 1; red; simpl; auto.
+        - apply IH in H1 as [ H1 | [ H1 | (t & H1 & H2) ] ]; auto.
+          ++ right; left; constructor 2 with q; auto.
+             constructor 1; red; simpl; auto.
+          ++ do 2 right; eauto.
+        - right; left; apply clos_rt_t with k; auto.
+          constructor 1; red; simpl; auto.
+  Qed.
+
   Theorem theorem11 K : Condition2a K → SN1 ⊆₂ K → well_founded K → ∀s, wfp T s.
   Proof.
     intros H1 H2 H3.
@@ -985,7 +1024,11 @@ Section ctxt.
     + intros s; apply condition1_b_a, condition1_d_b; split; auto.
       rewrite wfp_T_R_Rplus; intros Hs.
       specialize (H1 _ Hs).
-      intros t (C & a & b & -> & -> & Hab)%ctxt_iff u Hu.
+      intros t (a & b & Hab & H)%ctxt_iff_ctx_pair u Hu.
+      destruct Rstar_ctx_pair_inv with (1 := Hu) (2 := H)
+        as [ G | [ G | (v & G1 & G2) ] ]; auto.
+      * admit.
+      * admit. 
       
       induction 1 as [ t s Ht | f l r t s Hts IH ]; eauto; intros u Hu.
       rewrite clos_refl_trans__clos_trans in Hu.
