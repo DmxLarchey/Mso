@@ -1017,17 +1017,29 @@ Section ctxt.
           constructor 1; red; simpl; auto.
   Qed.
 
+  Fact ctx_pair_Rstart a b p q :
+       ctx_pair a b p q
+     → p = a /\ q = b
+    \/ R⁺ a p /\ R⁺ b q.
+  Proof.
+    induction 1 as [ | f l r p q H [ (-> & ->) | [] ] ]; auto; right.
+    + split; constructor 1; red; simpl; auto.
+    + split; [ constructor 2 with p | constructor 2 with q ]; auto; constructor 1; red; simpl; auto.
+  Qed.
+
   Theorem theorem11 K : Condition2a K → SN1 ⊆₂ K → well_founded K → ∀s, wfp T s.
   Proof.
     intros H1 H2 H3.
     apply theorem7 with (R := R) (K := K).
     + intros s; apply condition1_b_a, condition1_d_b; split; auto.
       rewrite wfp_T_R_Rplus; intros Hs.
-      specialize (H1 _ Hs).
+      generalize (H1 _ Hs); intros H0.
       intros t (a & b & Hab & H)%ctxt_iff_ctx_pair u Hu.
       destruct Rstar_ctx_pair_inv with (1 := Hu) (2 := H)
         as [ G | [ G | (v & G1 & G2) ] ]; auto.
-      * admit.
+      * destruct ctx_pair_Rstart with (1 := H) as [ (<- & <-) | (G1 & G2) ]; eauto. 
+        generalize (Hs _ G2).
+        admit.
       * admit. 
       
       induction 1 as [ t s Ht | f l r t s Hts IH ]; eauto; intros u Hu.
