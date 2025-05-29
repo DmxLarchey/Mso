@@ -776,92 +776,19 @@ Section wfp_commute.
 
 End wfp_commute.
 
-Section occ_eq.
-
-  Variables (X : Type) (x : X).
-
-  Definition lsum := fold_right plus 0.
-
-  Inductive occ_eq : term X → nat → Prop :=
-    | occ_eq_stop l : occ_eq ⟨x|l⟩ₜ 1
-    | occ_eq_next f l m : x ≠ f → Forall2 occ_eq l m → occ_eq ⟨f|l⟩ₜ (lsum m).
-    
-  Hint Constructors occ_eq : core.
-    
-  Definition occ_eq_inv t n (o : occ_eq t n) :
-    match t with
-    | ⟨f|l⟩ₜ => x = f ∧ n = 1 ∨ x ≠ f ∧ ∃m, Forall2 occ_eq l m ∧ n = lsum m
-    end.
-  Proof. destruct o; simpl; eauto. Qed.
-
-  Fact occ_eq_iff f l n :
-     occ_eq ⟨f|l⟩ₜ n ↔ x = f ∧ n = 1 ∨ x ≠ f ∧ ∃m, Forall2 occ_eq l m ∧ n = lsum m.
-  Proof.
-    split.
-    + apply occ_eq_inv.
-    + intros [ (<- & ->) | (? & m & ? & ->) ]; eauto.
-  Qed.
-
-End occ_eq.
-
-Arguments occ_eq {X}.
-
-(*
-
-Section context.
-
-  Variables (X : Type).
-  
-  Definition is_ctx {I} (t : term (I+X)) := ∀i, occ_eq (inl i) t 1.
-  
-  Fixpoint context_subst {I J} (s : I → term (J+X)) t : term (J+X) :=
-    match t with
-    | ⟨inl i|l⟩ₜ => s i
-    | ⟨inr i|l⟩ₜ => ⟨inr i|map (context_subst s) l⟩ₜ
-    end.
-
-  Fact is_ctx_subst I J (s : I → term (J+X)) (t : term (I+X)) :
-      ∀ (f : I → nat), (∀i, occ_eq (inl i) t (f i))
-    → ∀ (g : I → J → nat), (∀i j, occ_eq (inl j) (s i) (g i j))
-    → ∀ j, occ_eq (inl j) (context_subst s t) (sum i (f i * g i j)).
-    is_ctx t → (∀i, is_ctx (s i)) → is_ctx (context_subst s t).
-  Proof.
-    intros H1 Hs; revert H1. 
-    induction t as [ [ i | x ] l IH ]; intros Ht; simpl; auto.
-    intros j.
-    apply occ_eq_iff; right; split; [ easy | ].
-    red in H1.
-End context.
-
-Check context_subst.
-Definition ctx I X := { t : term (I+X) | forall i, occ t i = 1 }.
-
-*)
-
 Section ctxt.
 
   Variables (X : Type).
 
   Implicit Type (T : term X → term X → Prop) (t : term X).
+
+  Definition root t := match t with node f _ => f end.
+  Definition sons t := match t with node _ l => l end.
   
-  Inductive ctx : Type :=
-    | ctx_hole : ctx
-    | ctx_cont : X → list (term X) → ctx → list (term X) → ctx.
-    
-  Fixpoint ctx_subst C t :=
-    match C with
-    | ctx_hole => t
-    | ctx_cont f l D r => ⟨f|l++[ctx_subst D t]++r⟩ₜ
-    end.
-    
-  Fixpoint ctx_comp C D :=
-    match C with
-    | ctx_hole => D
-    | ctx_cont f l C r => ctx_cont f l (ctx_comp C D) r
-    end.
-    
-  Fact ctx_comp_subst C D t : ctx_subst (ctx_comp C D) t = ctx_subst C (ctx_subst D t).
-  Proof. induction C; simpl; do 3 f_equal; auto. Qed.
+  Let R r t := r ∈ sons t.
+  
+  Local Fact Rwf : well_founded R.
+  Proof. intros t; induction t; constructor; trivial. Qed.
 
   Inductive ctxt1 T : term X → term X → Prop :=
     | ctxt1_intro f l r p q : T p q → ctxt1 T ⟨f|l++[p]++r⟩ₜ ⟨f|l++[q]++r⟩ₜ.
@@ -878,6 +805,23 @@ Section ctxt.
       ctxt1 T p q 
     → ∃ f l r u v, p = ⟨f|l++[u]++r⟩ₜ ∧ q = ⟨f|l++[v]++r⟩ₜ ∧ T u v.
   Proof. destruct 1; do 5 eexists; eauto. Qed.
+
+  Section ctxt1_closed.
+
+    Variables (T : _) (HT : ctxt1 T ⊆₂ T).
+
+    Fact ctxt1_closed_subterm_comm : T⋄R ⊆₂ R⋄T.
+    Proof.
+      intros u [f m] (v & H1 & (l & r & E)%in_split); simpl in E; subst.
+      exists (node f (l++[u]++r)); split.
+      + red; simpl; eauto.
+      + apply HT; now constructor.
+    Qed.
+
+    Fact ctxt1_closed_wfp_subterm r t : R ⃰ r t → wfp T t → wfp T r.
+    Proof. apply wfp_commute_crt, ctxt1_closed_subterm_comm. Qed.
+
+  End ctxt1_closed.
 
   Inductive ctx_pair (a b : term X) : term X → term X → Prop :=
     | ctx_pair_stop : ctx_pair a b a b
@@ -898,16 +842,6 @@ Section ctxt.
   Qed.
   
   Hint Constructors ctxt1 ctxt ctx_pair : core.
-  
-  Fact ctxt_iff T p q : ctxt T p q ↔ ∃c r s, p = ctx_subst c r ∧ q = ctx_subst c s ∧ T r s.
-  Proof.
-    split.
-    + induction 1 as [ p q H | f l r p q H (c & a & b & -> & -> & ?) ].
-      * exists ctx_hole, p, q; now simpl.
-      * exists (ctx_cont f l c r), a, b; simpl; auto.
-    + intros (c & a & b & -> & -> & H).
-      induction c as [ | f l c IH r ]; simpl; auto; now constructor 2.
-  Qed.
 
   Fact ctxt_iff_ctx_pair T p q : ctxt T p q ↔ ∃ a b, T a b ∧ ctx_pair a b p q.
   Proof.
@@ -924,7 +858,7 @@ Section ctxt.
   Fact ctxt1__ctxt T : ctxt1 T ⊆₂ ctxt T.
   Proof. induction 1; eauto. Qed.
   
-  Fact ctxt_mono R T : R ⊆₂ T → ctxt R ⊆₂ ctxt T.
+  Fact ctxt_mono T K : T ⊆₂ K → ctxt T ⊆₂ ctxt K.
   Proof. induction 2; auto. Qed.
   
   Fact ctxt_idem T : ctxt (ctxt T) ⊆₂ ctxt T.
@@ -940,129 +874,42 @@ Section ctxt.
       gives  g[] > g²[] > g³[] > ... as in the contextual closure 
   
   Fact wf_ctxt R : well_founded R → well_founded (ctxt R). *)
-
-  Definition root t := match t with node f _ => f end.
-  Definition sons t := match t with node _ l => l end.
-  
-  Let R r t := r ∈ sons t.
-  
-  Local Fact Rwf : well_founded R.
-  Proof. intros t; induction t; constructor; trivial. Qed.
   
   Variables (sigma K' : term X → term X → Prop).
   
   Let T := ctxt sigma.
   Let SN1 := ctxt1 (λ t s, T t s ∧ wfp T s).
+
+  Fact T_ctxt1_closed : ctxt1 T ⊆₂ T.
+  Proof. induction 1; now constructor 2. Qed.
+
+  Hint Resolve T_ctxt1_closed : core.
   
   Fact T_comp_R : T⋄R ⊆₂ R⋄T.
-  Proof.
-    intros u [f m] (v & H1 & (l & r & E)%in_split); simpl in E; subst.
-    exists (node f (l++[u]++r)); split.
-    + red; simpl; eauto.
-    + now constructor 2.
-  Qed.
+  Proof. apply ctxt1_closed_subterm_comm, T_ctxt1_closed. Qed.
   
   Hint Resolve Rwf T_comp_R : core.
+
+  Fact T_wfp_subterm r t : R ⃰ r t → wfp T t → wfp T r.
+  Proof. apply ctxt1_closed_wfp_subterm, T_ctxt1_closed. Qed.
+
+  Hint Resolve T_wfp_subterm : core.
   
   Fact wfp_T_R_Rplus s : (∀r, R r s → wfp T r) ↔ (∀r, R⁺ r s → wfp T r).
   Proof.
     split.
     + intros H r; rewrite clos_trans_inv_right.
-      intros (u & H1 & H2%H).
-      revert H1 H2; apply wfp_commute_crt; auto.
-    + intros H r Hr; apply H; auto.
+      intros (? & ? & ?%H); eauto.
+    + intros H ? ?; apply H; auto.
   Qed.
 
   Definition Condition2a K := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
-  
-  Fact ctx_in_inv C u a :
-      R u (ctx_subst C a)
-    →  C = ctx_hole ∧ R u a
-    ∨ (∃ f l D r, C = ctx_cont f l D r ∧ u = ctx_subst D a)
-    ∨ (∃ f l m D r, C = ctx_cont f (l++[u]++m) D r)
-    ∨ (∃ f l D m r, C = ctx_cont f l D (m++[u]++r)).
-  Proof.
-    destruct C as [ | f l D r ]; simpl; auto.
-    unfold R; simpl.
-    intros [ (l' & m & ->)%in_split | [ | (m & r' & ->)%in_split ] ]%in_app_iff; right.
-    + right; left; exists f, l', m; eauto. 
-    + left; exists f, l, D, r; auto.
-    + right; right; exists f, l, D, m, r'; auto.
-  Qed.
 
-  Fact Rstar_ctx u a : R ⃰ u a → ∃C, a = ctx_subst C u.
-  Proof.
-    induction 1 as [ u [f m] H | u | u v a _ (D & ?) _ (C & ?) ].
-    + apply in_split in H; simpl in H.
-      destruct H as (l & r & ->).
-      exists (ctx_cont f l ctx_hole r); auto.
-    + exists ctx_hole; auto.
-    + exists (ctx_comp C D); rewrite ctx_comp_subst; now subst.
-  Qed.
+  Fact In_R r g l : r ∈ l → R r ⟨g|l⟩ₜ.
+  Proof. intro H; exact H. Qed.
 
-  Fact ctx_Rstar_inv C u a :
-      R ⃰ u (ctx_subst C a)
-    → u = ctx_subst C a
-    \/ (C = ctx_hole /\ ∃D, a = ctx_subst D u)
-    \/ (∃ f l D r, C = ctx_cont f l D r ∧ u = ctx_subst D a)
-    \/ (∃ f l E m D r, C = ctx_cont f (l++[ctx_subst E u]++m) D r)
-    \/ (∃ f l D m E r, C = ctx_cont f l D (m++[ctx_subst E u]++r)).
-  Proof.
-    rewrite clos_refl_trans__clos_trans, clos_trans_inv_right.
-    intros [ H | (v & Hv & Ha) ]; eauto; right.
-    apply ctx_in_inv in Ha
-      as [ (-> & Ha) 
-       | [ (f & l & D & r & H1 & H2)
-       | [ (f & l & m & D & r & H1)
-       |   (f & l & D & m & r & H1) 
-       ] ] ].
-    + left; split; auto.
-      apply Rstar_ctx; eauto.
-    + right; left.
-      exists f, l, D, r; split; auto.
-      apply  Rstar_ctx in Hv as (E & HE).
-      admit.
-    + do 2 right; left.
-      apply Rstar_ctx in Hv as (E & ->).
-      exists f, l, E, m, D, r; auto.
-    + do 3 right.
-      apply Rstar_ctx in Hv as (E & ->).
-      exists f, l, D, m, E, r; auto.
-  Admitted.
-
-  Fact Rstar_ctx_pair_inv s a b p q :
-      R ⃰ s p
-    → ctx_pair a b p q 
-    → R ⃰ s a ∨ R⁺ s q
-    ∨ ∃t, ctx_pair a b s t ∧ ctx_pair s t p q.
-  Proof.
-    intros H1 H2; revert H2 H1.
-    induction 1 as [ | f l r p q H IH ]; auto.
-    + rewrite clos_refl_trans__clos_trans,
-              clos_trans_inv_right.
-      intros [ -> | (k & H1 & H2) ].
-      * do 2 right; exists ⟨f|l ++ [q] ++ r⟩ₜ; auto.
-      * red in H2; simpl in H2.
-        apply in_app_iff in H2 as [ H2 | [ <- | H2 ] ].
-        - right; left; apply clos_rt_t with k; auto.
-          constructor 1; red; simpl; auto.
-        - apply IH in H1 as [ H1 | [ H1 | (t & H1 & H2) ] ]; auto.
-          ++ right; left; constructor 2 with q; auto.
-             constructor 1; red; simpl; auto.
-          ++ do 2 right; eauto.
-        - right; left; apply clos_rt_t with k; auto.
-          constructor 1; red; simpl; auto.
-  Qed.
-
-  Fact ctx_pair_Rstart a b p q :
-       ctx_pair a b p q
-     → p = a /\ q = b
-    \/ R⁺ a p /\ R⁺ b q.
-  Proof.
-    induction 1 as [ | f l r p q H [ (-> & ->) | [] ] ]; auto; right.
-    + split; constructor 1; red; simpl; auto.
-    + split; [ constructor 2 with p | constructor 2 with q ]; auto; constructor 1; red; simpl; auto.
-  Qed.
+  Hint Resolve In_R : core.
+  Hint Constructors clos_trans : core.
 
   (** Source code of Jeremy Dawson https://users.cecs.anu.edu.au/~jeremy/isabelle/2005/snabs/ *)
 
@@ -1073,118 +920,29 @@ Section ctxt.
     + intros s; apply condition1_b_a, condition1_d_b; split; auto.
       rewrite wfp_T_R_Rplus; intros Hs.
       red in H1.
-      (* the issue is when t = C₁[a], s = C₁[b] and C₁[_] = ⟨f|l++[_]++r⟩ₜ 
-                           with sigma a b for instance
-                      and  r = C₁[a] hence R* r t and T t s
-         
-         since R+ _ C₁[b] ⊆ wfp T we have wfp T b
-         hence T a b /\ wfp T b hence SN1 C₁[a] C₁[b]
-
-         the issue is when t = C₂[a], s = C₂[b] and C₂[_] = ⟨f|l++C₁[_]++r⟩ₜ 
-                           with sigma a b for instance
-                      and  r = C₂[a] hence R* r t and T t s
-         
-         since R+ _ C₂[b] ⊆ wfp T we have wfp T C₁[b]
-         hence T C₁[a] C₁[b] /\ wfp T C₁[b] hence SN1 C₂[a] C₂[b]
-
-         the issue is when t = C₂[a], s = C₂[b] and C₂[_] = ⟨f|l++C₁[_]++r⟩ₜ 
-                           with sigma a b for instance
-                      and  r = C₁[a] hence R+ r t and T t s
-
-         R+ C₁[b] C₂[b] hence wfp T C₁[b] hance wfp T C₁[a] (because T C₁[a] C₁[b])
-
-         since R+ _ C₂[b] ⊆ wfp T we have wfp T C₁[b]
-         hence T C₁[a] C₁[b] /\ wfp T C₁[b] hence SN1 C₂[a] C₂[b]
-
-         the issue is when t = C₁[C₁[r]], s = C₁[b] and 
-            with sigma C₁[r] b (with a := C₁[r])
-         hence R+ r t and T t s
-
-         we have wfp T b hence wfp T C₁[r]
-         we have R+ _ b ⊆ wfp T and  r R* C₁[r] sigma b
-         hence wfp T r \/ K r b
-           - wfp T r is ok
-           - but K r b does not give us K r C₁[b] ??
-
-
-         
-
-         by H1 we have (R*⋄sigma) u b -> wfp T u \/ K u b
-         hence wfp T a \/ K a b
-         - if wfp T a 
-         where *)
       intros t (a & b & Hab & H)%ctxt_iff_ctx_pair.
-
       revert t s H Hs.
-      induction 1 as [ | f l0 r0 p q H _ ]; intros G u Hu.
-      1: apply H1; eauto.
-      cut (wfp T u ∨ SN1 u ⟨f|l0 ++ [q] ++ r0⟩ₜ).
-      1: intros []; auto; right; apply H2.
-      revert H G u Hu.
-      induction 1 as [ | g l r p q H IH ]; intros G u Hu. 
-      *  
-      * rewrite clos_refl_trans__clos_trans,
-                clos_trans_inv_right in Hu.
-        destruct Hu as [ -> | (v & Hv1 & Hv2) ].
-        - right; apply H2; red; constructor; split.
-          ++ apply ctxt_iff_ctx_pair; eauto.
-          ++ apply G; constructor 1; red; simpl; auto.
-        - apply in_app_iff in Hv2 as [ Hv2 | [ <- | Hv2 ] ].
-          ++ left; apply G; apply clos_rt_t with v; auto.
-             constructor 1; red; simpl; auto.
-          ++    
-             destruct IH with (2 := Hv1) as [ Hu | Hu ]; auto.
-             ** intros v Hv; apply G; constructor 2 with q; auto.
-                constructor 1; red; simpl; auto.
-             ** 
-          ++ left; apply G; apply clos_rt_t with v; auto.
-             constructor 1; red; simpl; auto.
-
-specialize (H1 q).
-
-destruct IH with (2 := Hv1).
-         
-
-
-specialize (H1 _ G); apply H1; eauto.
-
-
-      destruct Rstar_ctx_pair_inv with (1 := Hu) (2 := H)
-        as [ G | [ G | (v & G1 & G2) ] ]; auto.
-      * destruct ctx_pair_Rstart with (1 := H) as [ (<- & <-) | (G1 & G2) ]; eauto. 
-        generalize (Hs _ G2).
-        admit.
-      * admit. 
-      
-      induction 1 as [ t s Ht | f l r t s Hts IH ]; eauto; intros u Hu.
-      rewrite clos_refl_trans__clos_trans in Hu.
-      destruct Hu as [ -> | Hu ].
-      * right; apply H2; constructor; split; auto.
-        apply Hs; constructor 1; red; simpl; auto.
-      * apply clos_trans_inv_right in Hu as (v & Hv & Hu).
-        apply in_app_iff in Hu as [ Hu | [ <- | Hu ] ].
-        - left; apply (Hs u), clos_rt_t with v; auto.
-          constructor; red; simpl; auto.
-        - apply IH in Hv; eauto.
-          ++ admit.
-          ++ admit.
-          ++ intros w Hw; apply Hs.
-             constructor 2 with s; auto.
-             constructor 1; red; simpl; eauto.
-        - simpl in Hu. 
-          left; apply (Hs u), clos_rt_t with v; auto.
-          constructor; red; simpl; auto.
+      destruct 1 as [ | g l r p q H ]; intros G u Hu; eauto.
+      assert (T p q) as Hpq by (apply ctxt_iff_ctx_pair; eauto).
+      rewrite clos_refl_trans__clos_trans, clos_trans_inv_right in Hu.
+      destruct Hu as [ -> | (v & Hv1 & Hv2) ].
+      * right; apply H2; red; constructor; split; eauto.
+        apply G; constructor 1; apply In_R; auto.
+      * left; apply in_app_iff in Hv2 as [ Hv2 | [ <- | Hv2 ] ].
+        - apply G; apply clos_rt_t with v; auto.
+        - cut (wfp T p); [ | cut (wfp T q) ]; eauto.
+          apply G; constructor 1; apply In_R; auto.
+        - apply G; apply clos_rt_t with v; auto.
+          constructor 1; apply In_R; auto.
     + intros s; generalize (H3 s).
       rewrite <- bars_iff_wfp; now apply bars_mono.
     + intros s; generalize (Rwf s).
       rewrite <- bars_iff_wfp; now apply bars_mono.
-  Admitted.
+  Qed.
   
   Let K := K' ∪₂ SN1. 
 
-
-
-  Definition Condition2a := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
+ (* Definition Condition2a := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s. *)
   Definition Condition2a' := ∀s, (∀r, R r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
   Definition Condition2b := R ⃰⋄sigma ⊆₂ (T∪₂R) ⃰⋄R ∪₂ K'.
 
@@ -1206,13 +964,12 @@ specialize (H1 _ G); apply H1; eauto.
     revert H3 Hz; apply wfp_commute_crt; auto.
   Qed.
   
-  Fact Condition_2a'_2a : Condition2a' → Condition2a.
+  Fact Condition_2a'_2a : Condition2a' → Condition2a K.
   Proof.
     intros H2a' s Hs; apply H2a'.
     intros r Hr; apply Hs; auto.
   Qed.
     
-  
   Let SN := @Acc (term X).
   Let fwf R r t := R r t /\ SN R t. 
 
