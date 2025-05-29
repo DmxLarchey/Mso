@@ -33,7 +33,36 @@ Notation "R ⋄ T" := (λ x z, ∃y, R x y ∧ T y z) (at level 2, right associa
 
 #[global] Notation "P '∪₂' Q" := (λ x y, P x y ∨ Q x y) (at level 50, left associativity, format "P ∪₂ Q").
 #[global] Notation "P '∩₂' Q" := (λ x y, P x y ∧ Q x y) (at level 48, left associativity, format "P ∩₂ Q").
-	
+
+Section onerel.
+
+  Variables (X : Type) (R : X → X → Prop).
+
+  Inductive onerel : list X → list X → Prop :=
+    | onerel_stop x y l : R x y → onerel (x::l) (y::l)
+    | onerel_skip x l m : onerel l m → onerel (x::l) (x::m).
+
+  Hint Constructors onerel : core.
+
+  Fact onerel_iff p q :
+      onerel p q 
+    ↔ ∃ l x y r, p = l++[x]++r /\ q = l++[y]++r /\ R x y.
+  Proof.
+    split.
+    + induction 1 as [ x y l | a p q _ (l & x & y & r & -> & -> & ?) ].
+      * now exists [], x, y, l.
+      * now exists (a::l), x, y, r.
+    + intros (l & x & y & r & -> & -> & ?).
+      induction l; simpl; eauto.
+  Qed.
+
+End onerel.
+
+Arguments onerel {_}.
+Arguments node {_}.
+
+Inductive oneup {X Y Z} (f : X → Y → Z) (R : Y → Y → Prop) : Z → Z → Prop :=
+  | oneup_intro x a b : R a b → oneup f R (f x a) (f x b).
  
 (*
 
@@ -837,6 +866,14 @@ Section ctxt.
   Inductive ctxt1 T : term X → term X → Prop :=
     | ctxt1_intro f l r p q : T p q → ctxt1 T ⟨f|l++[p]++r⟩ₜ ⟨f|l++[q]++r⟩ₜ.
 
+  Fact ctxt1_iff T r t : ctxt1 T r t ↔ oneup node (onerel T) r t.
+  Proof.
+    split.
+    + induction 1; constructor.
+      apply onerel_iff; exists l, p, q, r; auto.
+    + induction 1 as [ f ? ? (l & p & q & r & -> & -> & ?)%onerel_iff]; now constructor.
+  Qed.
+
   Fact ctxt1_inv T p q : 
       ctxt1 T p q 
     → ∃ f l r u v, p = ⟨f|l++[u]++r⟩ₜ ∧ q = ⟨f|l++[v]++r⟩ₜ ∧ T u v.
@@ -1027,14 +1064,91 @@ Section ctxt.
     + split; [ constructor 2 with p | constructor 2 with q ]; auto; constructor 1; red; simpl; auto.
   Qed.
 
+  (** Source code of Jeremy Dawson https://users.cecs.anu.edu.au/~jeremy/isabelle/2005/snabs/ *)
+
   Theorem theorem11 K : Condition2a K → SN1 ⊆₂ K → well_founded K → ∀s, wfp T s.
   Proof.
     intros H1 H2 H3.
     apply theorem7 with (R := R) (K := K).
     + intros s; apply condition1_b_a, condition1_d_b; split; auto.
       rewrite wfp_T_R_Rplus; intros Hs.
-      generalize (H1 _ Hs); intros H0.
-      intros t (a & b & Hab & H)%ctxt_iff_ctx_pair u Hu.
+      red in H1.
+      (* the issue is when t = C₁[a], s = C₁[b] and C₁[_] = ⟨f|l++[_]++r⟩ₜ 
+                           with sigma a b for instance
+                      and  r = C₁[a] hence R* r t and T t s
+         
+         since R+ _ C₁[b] ⊆ wfp T we have wfp T b
+         hence T a b /\ wfp T b hence SN1 C₁[a] C₁[b]
+
+         the issue is when t = C₂[a], s = C₂[b] and C₂[_] = ⟨f|l++C₁[_]++r⟩ₜ 
+                           with sigma a b for instance
+                      and  r = C₂[a] hence R* r t and T t s
+         
+         since R+ _ C₂[b] ⊆ wfp T we have wfp T C₁[b]
+         hence T C₁[a] C₁[b] /\ wfp T C₁[b] hence SN1 C₂[a] C₂[b]
+
+         the issue is when t = C₂[a], s = C₂[b] and C₂[_] = ⟨f|l++C₁[_]++r⟩ₜ 
+                           with sigma a b for instance
+                      and  r = C₁[a] hence R+ r t and T t s
+
+         R+ C₁[b] C₂[b] hence wfp T C₁[b] hance wfp T C₁[a] (because T C₁[a] C₁[b])
+
+         since R+ _ C₂[b] ⊆ wfp T we have wfp T C₁[b]
+         hence T C₁[a] C₁[b] /\ wfp T C₁[b] hence SN1 C₂[a] C₂[b]
+
+         the issue is when t = C₁[C₁[r]], s = C₁[b] and 
+            with sigma C₁[r] b (with a := C₁[r])
+         hence R+ r t and T t s
+
+         we have wfp T b hence wfp T C₁[r]
+         we have R+ _ b ⊆ wfp T and  r R* C₁[r] sigma b
+         hence wfp T r \/ K r b
+           - wfp T r is ok
+           - but K r b does not give us K r C₁[b] ??
+
+
+         
+
+         by H1 we have (R*⋄sigma) u b -> wfp T u \/ K u b
+         hence wfp T a \/ K a b
+         - if wfp T a 
+         where *)
+      intros t (a & b & Hab & H)%ctxt_iff_ctx_pair.
+
+      revert t s H Hs.
+      induction 1 as [ | f l0 r0 p q H _ ]; intros G u Hu.
+      1: apply H1; eauto.
+      cut (wfp T u ∨ SN1 u ⟨f|l0 ++ [q] ++ r0⟩ₜ).
+      1: intros []; auto; right; apply H2.
+      revert H G u Hu.
+      induction 1 as [ | g l r p q H IH ]; intros G u Hu. 
+      *  
+      * rewrite clos_refl_trans__clos_trans,
+                clos_trans_inv_right in Hu.
+        destruct Hu as [ -> | (v & Hv1 & Hv2) ].
+        - right; apply H2; red; constructor; split.
+          ++ apply ctxt_iff_ctx_pair; eauto.
+          ++ apply G; constructor 1; red; simpl; auto.
+        - apply in_app_iff in Hv2 as [ Hv2 | [ <- | Hv2 ] ].
+          ++ left; apply G; apply clos_rt_t with v; auto.
+             constructor 1; red; simpl; auto.
+          ++    
+             destruct IH with (2 := Hv1) as [ Hu | Hu ]; auto.
+             ** intros v Hv; apply G; constructor 2 with q; auto.
+                constructor 1; red; simpl; auto.
+             ** 
+          ++ left; apply G; apply clos_rt_t with v; auto.
+             constructor 1; red; simpl; auto.
+
+specialize (H1 q).
+
+destruct IH with (2 := Hv1).
+         
+
+
+specialize (H1 _ G); apply H1; eauto.
+
+
       destruct Rstar_ctx_pair_inv with (1 := Hu) (2 := H)
         as [ G | [ G | (v & G1 & G2) ] ]; auto.
       * destruct ctx_pair_Rstart with (1 := H) as [ (<- & <-) | (G1 & G2) ]; eauto. 
