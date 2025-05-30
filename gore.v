@@ -34,36 +34,11 @@ Notation "R ⋄ T" := (λ x z, ∃y, R x y ∧ T y z) (at level 2, right associa
 #[global] Notation "P '∪₂' Q" := (λ x y, P x y ∨ Q x y) (at level 50, left associativity, format "P ∪₂ Q").
 #[global] Notation "P '∩₂' Q" := (λ x y, P x y ∧ Q x y) (at level 48, left associativity, format "P ∩₂ Q").
 
-Section onerel.
 
-  Variables (X : Type) (R : X → X → Prop).
+Fact rel_comp_assoc U X Y Z (R : U → X → Prop) (T : X → Y → Prop) (K : Y → Z → Prop) u z : R⋄T⋄K u z ↔ (R⋄T)⋄K u z.
+Proof. firstorder. Qed.
+  
 
-  Inductive onerel : list X → list X → Prop :=
-    | onerel_stop x y l : R x y → onerel (x::l) (y::l)
-    | onerel_skip x l m : onerel l m → onerel (x::l) (x::m).
-
-  Hint Constructors onerel : core.
-
-  Fact onerel_iff p q :
-      onerel p q 
-    ↔ ∃ l x y r, p = l++[x]++r /\ q = l++[y]++r /\ R x y.
-  Proof.
-    split.
-    + induction 1 as [ x y l | a p q _ (l & x & y & r & -> & -> & ?) ].
-      * now exists [], x, y, l.
-      * now exists (a::l), x, y, r.
-    + intros (l & x & y & r & -> & -> & ?).
-      induction l; simpl; eauto.
-  Qed.
-
-End onerel.
-
-Arguments onerel {_}.
-Arguments node {_}.
-
-Inductive oneup {X Y Z} (f : X → Y → Z) (R : Y → Y → Prop) : Z → Z → Prop :=
-  | oneup_intro x a b : R a b → oneup f R (f x a) (f x b).
- 
 (*
 
 Section list_order.
@@ -269,8 +244,89 @@ End cover_morphism.
 
 Notation wfp := Acc.
 
+Fact wfp_inv {X T} {x : X} : wfp T x → ∀{y}, T y x → wfp T y.
+Proof. now intros []. Qed.
+
 Fact wfp_clos_rt X T (x y : X) : T ⃰ x y → wfp T y → wfp T x.
 Proof. induction 1; eauto. Qed.
+
+Fact wfp_clos_t X T (x : X) : wfp T x → wfp T⁺ x.
+Proof. induction 1; constructor 1; induction 1; eauto. Qed.
+
+Fact wfp_anti X (R T : X → X → Prop) : R ⊆₂ T → wfp T ⊆₁ wfp R.
+Proof. induction 2; constructor; eauto. Qed.
+
+Section onerel.
+
+  Variables (X : Type) (R : X → X → Prop).
+
+  Inductive onerel : list X → list X → Prop :=
+    | onerel_stop x y l : R x y → onerel (x::l) (y::l)
+    | onerel_skip x l m : onerel l m → onerel (x::l) (x::m).
+
+  Hint Constructors onerel : core.
+
+  Fact onerel_iff p q :
+      onerel p q 
+    ↔ ∃ l x y r, p = l++[x]++r /\ q = l++[y]++r /\ R x y.
+  Proof.
+    split.
+    + induction 1 as [ x y l | a p q _ (l & x & y & r & -> & -> & ?) ].
+      * now exists [], x, y, l.
+      * now exists (a::l), x, y, r.
+    + intros (l & x & y & r & -> & -> & ?).
+      induction l; simpl; eauto.
+  Qed.
+  
+  Fact wfp_onerel l : Forall (wfp R) l → wfp onerel l.
+  Proof.
+    induction 1 as [ | x l H1 _ IH ].
+    + constructor; now intros ? ([] & ? & ? & ? & _ & ? & _)%onerel_iff.
+    + revert H1 l IH.
+      induction 1 as [ x _ IHx ].
+      induction 1 as [ l Hl IHl ].
+      constructor.
+      intros [ | y m ] ([|z l'] & u & v & r & H1 & H2& H3)%onerel_iff.
+      1,2: easy.
+      * inversion H1; inversion H2; subst; eauto.
+      * inversion H1; inversion H2; subst m l z y.
+        apply IHl, onerel_iff.
+        now exists l', u, v, r.
+  Qed.
+
+End onerel.
+
+Arguments onerel {_}.
+Arguments node {_}.
+Arguments wfp_onerel {_ _ _}.
+
+Section oneup.
+
+  Variables (X Y Z : Type) (f : X → Y → Z) (R : Y → Y → Prop).
+
+  Inductive oneup : Z → Z → Prop :=
+    | oneup_intro x a b : R a b → oneup (f x a) (f x b).
+
+  Fact oneup_iff z1 z2 :
+    oneup z1 z2 ↔ ∃ x a b, z1 = f x a ∧ z2 = f x b ∧ R a b.
+  Proof.
+    split.
+    + induction 1 as [ x a b ]; exists x; eauto.
+    + intros (? & ? & ? & -> & -> & ?); now constructor.
+  Qed.
+    
+  Hypothesis f_inj : ∀ x1 x2 y1 y2, f x1 y1 = f x2 y2 → x1 = x2 ∧ y1 = y2.
+
+  Fact wfp_oneup x y : wfp R y → wfp oneup (f x y).
+  Proof.
+    induction 1 as [ y _ IHy ]; constructor.
+    intros z (x' & a & b & -> & []%f_inj & H3)%oneup_iff.
+    subst; auto.
+  Qed.
+
+End oneup.
+
+Arguments oneup {_ _ _}.
 
 Section bars.
 
@@ -344,9 +400,6 @@ Section bars.
 
   Fact gbars_inv T Q P x : gbars T Q P x → (P x → ∀y, T y x → P y) → ∀y, T y x → gbars T Q P y.
   Proof. intros []; auto. Qed.
-
-  Fact wfp_inv T x : (wfp T x → ∀y, T y x → wfp T y).
-  Proof. now intros []. Qed.
 
   Hint Constructors clos_refl_trans : core.
 
@@ -758,8 +811,53 @@ Qed.
 
 Section wfp_commute.
 
-  Variables (X : Type) (R T : X → X → Prop)
-            (HRT : T⋄R ⊆₂ R⋄T).
+  Variables (X : Type).
+  
+  Implicit Types (R T : X → X → Prop).
+
+  Lemma lemma12a_one R T : (∀x, wfp R⋄T x) → (∀x, wfp T⋄R x).
+  Proof.
+    intros H x.
+    constructor; intros y (z & H1 & H2).
+    induction z in x, y, H1, H2 |- * using (well_founded_induction H).
+    constructor; intros ? (? & []); eauto.
+  Qed.
+  
+  Lemma lemma12a R T : well_founded R⋄T ↔ well_founded T⋄R.
+  Proof. split; unfold well_founded; apply lemma12a_one. Qed.
+
+  Lemma lemma12b R T : (∀x, wfp T x) → ∀x, wfp R⋄T ⃰ x ↔ wfp (R∪₂T) x.
+  Proof.
+    intros HT x; split.
+    + induction 1 as [ x _ IH ].
+      induction x as [ x IHx ] using (well_founded_induction HT).
+      constructor 1; intros y [ Hy | Hy ]; eauto.
+      apply IHx; auto.
+      intros z (? & []); apply IH; eauto.
+    + intros Hx%wfp_clos_t.
+      revert x Hx; apply wfp_anti.
+      intros x z (y & H1 & H2).
+      apply clos_t_rt with y; eauto.
+      revert H2; apply crt_mono; eauto.
+  Qed.
+  
+  Lemma lemma12c R T : (∀x, wfp T x) → R⋄T ⊆₂ T ⃰⋄R → ∀x, wfp (R∪₂T) x ↔ wfp R x.
+  Proof.
+    intros HT HRT x; split.
+    1: apply wfp_anti; eauto.
+    induction 1 as [ x _ IH ].
+    induction x as [ x IHx ] using (well_founded_induction HT).
+    constructor 1.
+    intros y [ Hy | Hy ]; eauto.
+    apply IHx; auto.
+    intros z Hz.
+    destruct (HRT z x) as (u & H1 & H2); eauto.
+    generalize (IH _ H2).
+    apply wfp_clos_rt.
+    revert H1; apply crt_mono; eauto.
+  Qed.
+  
+  Variables (R T : _) (HRT : T⋄R ⊆₂ R⋄T).
 
   Fact wfp_commute s : wfp T s → ∀t, R t s → wfp T t.
   Proof.
@@ -776,6 +874,14 @@ Section wfp_commute.
 
 End wfp_commute.
 
+Fact wf_cap_wfp X T : well_founded (λ x y : X, T x y ∧ wfp T y).
+Proof.
+  intros x; constructor 1.
+  intros y (H1 & H2).
+  generalize (wfp_inv H2 H1).
+  apply wfp_anti; tauto.
+Qed.
+
 Section ctxt.
 
   Variables (X : Type).
@@ -787,7 +893,7 @@ Section ctxt.
   
   Let R r t := r ∈ sons t.
   
-  Local Fact Rwf : well_founded R.
+  Local Fact subt_wf : well_founded R.
   Proof. intros t; induction t; constructor; trivial. Qed.
 
   Inductive ctxt1 T : term X → term X → Prop :=
@@ -805,6 +911,16 @@ Section ctxt.
       ctxt1 T p q 
     → ∃ f l r u v, p = ⟨f|l++[u]++r⟩ₜ ∧ q = ⟨f|l++[v]++r⟩ₜ ∧ T u v.
   Proof. destruct 1; do 5 eexists; eauto. Qed.
+  
+  Fact wfp_ctxt1 T f l : Forall (wfp T) l → wfp (ctxt1 T) ⟨f|l⟩ₜ.
+  Proof.
+    intros Hl.
+    cut (wfp (oneup node (onerel T)) ⟨f|l⟩ₜ).
+    + apply wfp_anti; intros ? ?; apply ctxt1_iff.
+    + apply wfp_oneup.
+      * now inversion 1.
+      * now apply wfp_onerel.
+  Qed.
 
   Section ctxt1_closed.
 
@@ -822,12 +938,7 @@ Section ctxt.
     Proof. apply wfp_commute_crt, ctxt1_closed_subterm_comm. Qed.
 
   End ctxt1_closed.
-
-  Inductive ctx_pair (a b : term X) : term X → term X → Prop :=
-    | ctx_pair_stop : ctx_pair a b a b
-    | ctx_pair_comp f l r p q : ctx_pair a b p q → ctx_pair a b ⟨f|l++[p]++r⟩ₜ ⟨f|l++[q]++r⟩ₜ
-    .
-
+  
   Inductive ctxt T : term X → term X → Prop :=
     | ctxt_stop p q : T p q → ctxt T p q
     | ctxt_comp f l r p q : ctxt T p q → ctxt T ⟨f|l++[p]++r⟩ₜ ⟨f|l++[q]++r⟩ₜ
@@ -840,20 +951,8 @@ Section ctxt.
     destruct 1; eauto.
     right; do 5 eexists; eauto.
   Qed.
-  
-  Hint Constructors ctxt1 ctxt ctx_pair : core.
 
-  Fact ctxt_iff_ctx_pair T p q : ctxt T p q ↔ ∃ a b, T a b ∧ ctx_pair a b p q.
-  Proof.
-    split.
-    + induction 1 as [ p q H | f l r p q H (a & b & ? & ?) ].
-      * exists p, q; auto.
-      * exists a, b; eauto.
-    + intros (a & b & H1 & H); revert H.
-      induction 1; eauto.
-  Qed.
-
-  Definition pctxt T := ctxt (ctxt1 T).
+  Hint Constructors ctxt1 ctxt : core.
 
   Fact ctxt1__ctxt T : ctxt1 T ⊆₂ ctxt T.
   Proof. induction 1; eauto. Qed.
@@ -863,13 +962,15 @@ Section ctxt.
   
   Fact ctxt_idem T : ctxt (ctxt T) ⊆₂ ctxt T.
   Proof. induction 1; auto. Qed.
+
+  Definition pctxt T := ctxt (ctxt1 T).
   
   Fact pctxt__ctxt T : pctxt T ⊆₂ ctxt T.
   Proof.
     intros ? ? H; apply ctxt_idem.
     revert H; apply ctxt_mono, ctxt1__ctxt.
   Qed.
-  
+
   (** Fails: g[] > g[g[]] as single reduction
       gives  g[] > g²[] > g³[] > ... as in the contextual closure 
   
@@ -878,7 +979,6 @@ Section ctxt.
   Variables (sigma K' : term X → term X → Prop).
   
   Let T := ctxt sigma.
-  Let SN1 := ctxt1 (λ t s, T t s ∧ wfp T s).
 
   Fact T_ctxt1_closed : ctxt1 T ⊆₂ T.
   Proof. induction 1; now constructor 2. Qed.
@@ -888,7 +988,7 @@ Section ctxt.
   Fact T_comp_R : T⋄R ⊆₂ R⋄T.
   Proof. apply ctxt1_closed_subterm_comm, T_ctxt1_closed. Qed.
   
-  Hint Resolve Rwf T_comp_R : core.
+  Hint Resolve subt_wf T_comp_R : core.
 
   Fact T_wfp_subterm r t : R ⃰ r t → wfp T t → wfp T r.
   Proof. apply ctxt1_closed_wfp_subterm, T_ctxt1_closed. Qed.
@@ -903,46 +1003,60 @@ Section ctxt.
     + intros H ? ?; apply H; auto.
   Qed.
 
-  Definition Condition2a K := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
+  Let Condition2z K U := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄U u s → wfp T u ∨ K u s.
 
   Fact In_R r g l : r ∈ l → R r ⟨g|l⟩ₜ.
   Proof. intro H; exact H. Qed.
 
   Hint Resolve In_R : core.
   Hint Constructors clos_trans : core.
+  
+  Definition SN1 := ctxt1 (λ t s, T t s ∧ wfp T s).
+  
+  Fact wf_SN1 : well_founded SN1.
+  Proof.
+    intros [f l].
+    apply wfp_ctxt1, Forall_forall.
+    intros t _.
+    apply wf_cap_wfp.
+  Qed.
+
+  Local Fact Condition2z_ctxt {K} : SN1 ⊆₂ K → Condition2z K sigma → Condition2z K T.
+  Proof.
+    intros H2 H1 s Hs u (t & H3 & H4).
+    revert H4 Hs u H3.
+    destruct 1 as [ t s | g l r p q H ]; intros G u Hu; eauto.
+    rewrite clos_refl_trans__clos_trans, clos_trans_inv_right in Hu.
+    destruct Hu as [ -> | (v & Hv1 & Hv2) ].
+    + right; apply H2; red; constructor; split; eauto.
+      apply G; constructor 1; apply In_R; auto.
+    + left; apply in_app_iff in Hv2 as [ Hv2 | [ <- | Hv2 ] ].
+      * apply G; apply clos_rt_t with v; auto.
+      * cut (wfp T p); [ | cut (wfp T q) ]; eauto.
+        apply G; constructor 1; apply In_R; auto.
+      * apply G; apply clos_rt_t with v; auto.
+        constructor 1; apply In_R; auto.
+  Qed.
 
   (** Source code of Jeremy Dawson https://users.cecs.anu.edu.au/~jeremy/isabelle/2005/snabs/ *)
 
-  Theorem theorem11 K : Condition2a K → SN1 ⊆₂ K → well_founded K → ∀s, wfp T s.
+  Theorem theorem11 K : Condition2z K sigma → SN1 ⊆₂ K → well_founded K → ∀s, wfp T s.
   Proof.
     intros H1 H2 H3.
     apply theorem7 with (R := R) (K := K).
     + intros s; apply condition1_b_a, condition1_d_b; split; auto.
-      rewrite wfp_T_R_Rplus; intros Hs.
-      red in H1.
-      intros t (a & b & Hab & H)%ctxt_iff_ctx_pair.
-      revert t s H Hs.
-      destruct 1 as [ | g l r p q H ]; intros G u Hu; eauto.
-      assert (T p q) as Hpq by (apply ctxt_iff_ctx_pair; eauto).
-      rewrite clos_refl_trans__clos_trans, clos_trans_inv_right in Hu.
-      destruct Hu as [ -> | (v & Hv1 & Hv2) ].
-      * right; apply H2; red; constructor; split; eauto.
-        apply G; constructor 1; apply In_R; auto.
-      * left; apply in_app_iff in Hv2 as [ Hv2 | [ <- | Hv2 ] ].
-        - apply G; apply clos_rt_t with v; auto.
-        - cut (wfp T p); [ | cut (wfp T q) ]; eauto.
-          apply G; constructor 1; apply In_R; auto.
-        - apply G; apply clos_rt_t with v; auto.
-          constructor 1; apply In_R; auto.
+      intros Hs t Ht r Hr.
+      apply (Condition2z_ctxt H2 H1); eauto.
+      now apply wfp_T_R_Rplus.
     + intros s; generalize (H3 s).
       rewrite <- bars_iff_wfp; now apply bars_mono.
-    + intros s; generalize (Rwf s).
+    + intros s; generalize (subt_wf s).
       rewrite <- bars_iff_wfp; now apply bars_mono.
   Qed.
-  
+
   Let K := K' ∪₂ SN1. 
 
- (* Definition Condition2a := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s. *)
+  Definition Condition2a := ∀s, (∀r, R⁺ r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
   Definition Condition2a' := ∀s, (∀r, R r s → wfp T r) → ∀u, R ⃰⋄sigma u s → wfp T u ∨ K u s.
   Definition Condition2b := R ⃰⋄sigma ⊆₂ (T∪₂R) ⃰⋄R ∪₂ K'.
 
@@ -950,8 +1064,8 @@ Section ctxt.
 
   Fact T_cup_R_star : (T ∪₂ R) ⃰ ⊆₂ R ⃰ ⋄T ⃰.
   Proof. apply crt_xchg_cup, T_comp_R. Qed.
-  
-  Fact Condition_2b_2a : Condition2b → Condition2a'.
+
+  Fact Condition_2b_2a' : Condition2b → Condition2a'.
   Proof.
     intros H2b s Hs u Hu; unfold K.
     destruct (H2b _ _ Hu) as [ (w & H3 & H4) | ]; auto.
@@ -963,22 +1077,101 @@ Section ctxt.
     1: revert H5 Hw; apply wfp_clos_rt.
     revert H3 Hz; apply wfp_commute_crt; auto.
   Qed.
-  
-  Fact Condition_2a'_2a : Condition2a' → Condition2a K.
+
+  Fact Condition_2a'_2a : Condition2a' → Condition2a.
   Proof.
     intros H2a' s Hs; apply H2a'.
     intros r Hr; apply Hs; auto.
   Qed.
-    
-  Let SN := @Acc (term X).
-  Let fwf R r t := R r t /\ SN R t. 
-
-  Variables (R : term X → term X → Prop).
-
-  Inductive sn1 : term X → term X → Prop :=
-    | sn1_intro f l p q r : SN R q → ctxt R p q → sn1 ⟨f|l++[p]++r⟩ₜ ⟨f|l++[q]++r⟩ₜ.
-
-  Definition sn2 := ctxt sn1.
   
-  Fact sn1__sn2 r t : sn1 r t → sn2 r t.
-  Proof. now constructor 1. Qed.
+End ctxt.
+
+Arguments ctxt {_}.
+Arguments root {_}.
+Arguments sons {_}.
+Arguments SN1 {_}.
+
+Fact forall_congr X (P Q : X → Prop) : (∀x, P x ↔ Q x) → (∀x, P x) ↔ (∀x, Q x).
+Proof. firstorder. Qed.
+
+Fact wfp_congr X (R T : X → X → Prop) : (∀ x y, R x y ↔ T x y) → ∀x, wfp R x ↔ wfp T x.
+Proof. intros H ?; split; apply wfp_anti, H. Qed.
+
+Section constricting.
+
+  Variables (X : Type) (sigma : term X → term X → Prop).
+  
+  Implicit Types (t : term X).
+  
+  Let T := ctxt sigma.
+  
+  Let R r t := r ∈ sons t.
+  
+  Definition constrict t s := sigma t s ∧ Forall (wfp T) (sons s). 
+  
+  Definition thm13_rel1 := (R ⃰⋄constrict)∪₂(SN1 sigma).
+  Definition thm13_rel2 := (SN1 sigma) ⃰⋄R ⃰⋄constrict.
+  Definition thm13_rel3 := constrict⋄(SN1 sigma) ⃰⋄R ⃰.
+  Definition thm13_rel4 := R ⃰⋄constrict⋄(SN1 sigma) ⃰.
+  Definition thm13_rel5 := R ⃰⋄T.
+  Definition thm13_rel6 := T∪₂R.
+  Definition thm13_rel6' := (T∪₂R)⁺.
+  Definition thm13_rel7 := T.
+  Definition thm13_rel8 := T⁺.
+  Definition thm13_rel9 := T⁺∪₂R.
+  
+  (* strategy : 
+       1 -> 7 using theorem 11 then
+       7 -> 6 -> 6' -> all others
+       
+       1 -> 7 -> 6 -> 6' -> 1 
+       
+       2 -> 3 -> 4 
+       1 -> 4 -> 1
+       
+   *)
+
+  Theorem thm13_1_7 : well_founded thm13_rel1 → well_founded thm13_rel7.
+  Proof.
+    unfold thm13_rel1, thm13_rel7.
+    intros H; red.
+    apply theorem11 with (K := R ⃰⋄constrict ∪₂ (SN1 sigma)); eauto.
+    apply Condition_2a'_2a.
+    red.
+    intros [ f l ] Hl u (v & H1 & H2); simpl in Hl.
+    right; left.
+    exists v; repeat split; auto.
+    simpl; now apply Forall_forall.
+  Qed.
+  
+  Theorem thm13_7_6 : well_founded thm13_rel7 → well_founded thm13_rel6.
+  Proof.
+    unfold thm13_rel6, thm13_rel7.
+    intros H t.
+    apply lemma12c; eauto.
+    + apply subt_wf.
+    + intros ? ? (? & [])%(@T_comp_R _ sigma); eauto.
+  Qed.
+  
+  Theorem thm13_6_6' : well_founded thm13_rel6 → well_founded thm13_rel6'.
+  Proof. intros H x; generalize (H x); apply wfp_clos_t. Qed.
+  
+  Theorem thm14_1_4 : well_founded thm13_rel1 ↔ well_founded thm13_rel4.
+  Proof.
+    unfold thm13_rel1, thm13_rel4.
+    apply forall_congr; intro x; symmetry.
+    rewrite <- (lemma12b _ (R ⃰⋄constrict) (SN1 sigma)).
+    + revert x; apply wfp_congr.
+      apply rel_comp_assoc.
+    + apply wf_SN1.
+  Qed.
+  
+  Theorem thm14_5_6 : well_founded thm13_rel5 ↔ well_founded thm13_rel6.
+  Proof.
+    unfold thm13_rel5, thm13_rel6.
+    rewrite lemma12a.
+    apply forall_congr; intro x.
+    apply lemma12b, subt_wf.
+  Qed.
+
+End constricting.

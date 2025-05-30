@@ -104,6 +104,9 @@ Section rel_utils.
     + induction 1 as [ | ? ? ? ? _ _ (? & []) ]; eauto.
     + intros (? & [ <- | ]%clos_refl_trans__clos_trans & H2); eauto.
   Qed.
+  
+  Fact clos_t_rt R x y z : clos_trans R x y → clos_refl_trans R y z → clos_trans R x z.
+  Proof. induction 2; eauto. Qed.
 
 End rel_utils.
 
