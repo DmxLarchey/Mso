@@ -796,6 +796,9 @@ Qed.
 Fact crt_mono X (R T : X → X → Prop) : R ⊆₂ T → R ⃰ ⊆₂ T ⃰.
 Proof. induction 2; eauto. Qed.
 
+Fact ct_mono X (R T : X → X → Prop) : R ⊆₂ T → R⁺ ⊆₂ T⁺.
+Proof. induction 2; eauto. Qed.
+
 Fact crt_xchg_cup X (R T : X → X → Prop) : T⋄R ⊆₂ R⋄T → ∀ u v, (T ∪₂ R) ⃰ u v ↔ R ⃰⋄T ⃰ u v.
 Proof.
   intros G; split.
@@ -1095,7 +1098,13 @@ Fact forall_congr X (P Q : X → Prop) : (∀x, P x ↔ Q x) → (∀x, P x) ↔
 Proof. firstorder. Qed.
 
 Fact wfp_congr X (R T : X → X → Prop) : (∀ x y, R x y ↔ T x y) → ∀x, wfp R x ↔ wfp T x.
-Proof. intros H ?; split; apply wfp_anti, H. Qed.
+Proof. intros H; split; apply wfp_anti, H. Qed.
+
+Fact wf_congr X (R T : X → X → Prop) : (∀ x y, R x y ↔ T x y) → well_founded R ↔ well_founded T.
+Proof. intro; now apply forall_congr, wfp_congr. Qed.
+
+Fact wf_comp_assoc X (R S T : X → X → Prop) : well_founded (R⋄S)⋄T ↔ well_founded R⋄S⋄T.
+Proof. apply wf_congr; intros ? ?; rewrite rel_comp_assoc; tauto. Qed.
 
 Section constricting.
 
@@ -1122,12 +1131,15 @@ Section constricting.
   
   (* strategy : 
        1 -> 7 using theorem 11 then
-       7 -> 6 -> 6' -> all others
        
-       1 -> 7 -> 6 -> 6' -> 1 
+       7 -> 6 -> 6' -> 1 
        
-       2 -> 3 -> 4 
-       1 -> 4 -> 1
+       1 <-> 4 
+       5 <-> 6
+
+       2 <-> 3 <-> 4
+
+       6' -> 9 -> 8 -> 7
        
    *)
 
@@ -1155,8 +1167,22 @@ Section constricting.
   
   Theorem thm13_6_6' : well_founded thm13_rel6 → well_founded thm13_rel6'.
   Proof. intros H x; generalize (H x); apply wfp_clos_t. Qed.
+
+  Theorem thm13_6'_1 : well_founded thm13_rel6' → well_founded thm13_rel1.
+  Proof.
+    unfold thm13_rel6', thm13_rel1.
+    apply wf_incl.
+    intros x y [ (z & H1 & H2 & H3) | H ].
+    + apply clos_rt_t with z.
+      * revert H1; apply crt_mono; auto.
+      * now constructor 1; left; constructor 1.
+    + constructor 1; left.
+      apply ctxt1__ctxt in H.
+      apply ctxt_idem.
+      revert H; apply ctxt_mono; tauto.
+  Qed.
   
-  Theorem thm14_1_4 : well_founded thm13_rel1 ↔ well_founded thm13_rel4.
+  Theorem thm13_1_4 : well_founded thm13_rel1 ↔ well_founded thm13_rel4.
   Proof.
     unfold thm13_rel1, thm13_rel4.
     apply forall_congr; intro x; symmetry.
@@ -1166,12 +1192,45 @@ Section constricting.
     + apply wf_SN1.
   Qed.
   
-  Theorem thm14_5_6 : well_founded thm13_rel5 ↔ well_founded thm13_rel6.
+  Theorem thm13_5_6 : well_founded thm13_rel5 ↔ well_founded thm13_rel6.
   Proof.
     unfold thm13_rel5, thm13_rel6.
     rewrite lemma12a.
     apply forall_congr; intro x.
     apply lemma12b, subt_wf.
+  Qed.
+
+  Theorem thm13_2_3 : well_founded thm13_rel2 ↔ well_founded thm13_rel3.
+  Proof.
+    unfold thm13_rel2, thm13_rel3.
+    rewrite <- wf_comp_assoc, lemma12a; tauto.
+  Qed.
+
+  Theorem thm13_3_4 : well_founded thm13_rel3 ↔ well_founded thm13_rel4.
+  Proof.
+    unfold thm13_rel4, thm13_rel3.
+    rewrite <- wf_comp_assoc, lemma12a; tauto.
+  Qed.
+
+  Theorem thm13_6'_9 : well_founded thm13_rel6' → well_founded thm13_rel9.
+  Proof.
+    unfold thm13_rel6', thm13_rel9.
+    apply wf_incl.
+    intros x y [ H | H ].
+    + revert H; apply ct_mono; auto.
+    + constructor 1; auto.
+  Qed.
+
+  Theorem thm13_9_8 : well_founded thm13_rel9 → well_founded thm13_rel8.
+  Proof.
+    unfold thm13_rel8, thm13_rel9.
+    apply wf_incl; now left.
+  Qed.
+
+  Theorem thm13_8_7 : well_founded thm13_rel8 → well_founded thm13_rel7.
+  Proof.
+    unfold thm13_rel8, thm13_rel7.
+    apply wf_incl; now constructor 1.
   Qed.
 
 End constricting.
