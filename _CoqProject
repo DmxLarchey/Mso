@@ -4,6 +4,7 @@ utils.v
 perm_eq.v
 acc.v
 mso.v
+term.v
 mpo.v
 gore.v
 goubault.v

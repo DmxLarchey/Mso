@@ -11,7 +11,7 @@ Require Import List Wellfounded Relations Utf8.
 
 Import ListNotations.
 
-Require Import utils mpo.
+Require Import utils term.
 
 
 (*Arguments clos_refl_trans {_}.
